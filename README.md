@@ -1,5 +1,12 @@
 # `onsrap`
 
+[![Lint](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml)
+[![Security](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml)
+[![Type Check](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml)
+[![Tests](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml)
+[![Build](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml)
+[![Coverage](https://codecov.io/gh/ONSdigital/onsrap/branch/main/graph/badge.svg)](https://codecov.io/gh/ONSdigital/onsrap)
+
 A simple Pipeline orchestration package.
 
 ```{warning}
