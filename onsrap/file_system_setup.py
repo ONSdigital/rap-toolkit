@@ -48,7 +48,7 @@ class FileSystemSetUp:
 
     Parameters
     ----------
-    ``prefix`` : str, default = "file://"
+    ``prefix`` : str
         The file path prefix. This should be s3a:// for s3 file systems and file://
         for absolute locations in local file systems. This is removed in the factory
         method to allow for compatability with file systems that do not require a
@@ -64,6 +64,6 @@ class FileSystemSetUp:
 
     """
 
+    prefix: str
     root: str
     workspace_path: Optional[str] = None
-    prefix: str = "file://"
