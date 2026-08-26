@@ -1,6 +1,10 @@
+import glob
+import importlib.util
+import logging
 from dataclasses import dataclass
+from importlib.machinery import ModuleSpec
 from pathlib import Path
-from typing import Optional, Protocol, Type
+from typing import IO, Optional, Protocol, Type
 
 
 @dataclass
@@ -23,12 +27,15 @@ class FileSystemSetUp:
     ``workspace_path`` : str, Optional
         The file subpath to access a lower level of file directory. This should be
         used for S3 to access your workspace area within the bucket.
-
+    ``file_name`` : str, Optional
+        The name of the file to be accessed. This is optional as some methods require
+        directory access only whereas this is used for a specific file location.
     """
 
     prefix: str
     root: str
     workspace_path: Optional[str] = None
+    file_name: Optional[str] = None
 
     def create_uri(self) -> str:
         """
@@ -36,13 +43,17 @@ class FileSystemSetUp:
 
         Returns
         -------
-        str
+        ``str``
             The constructed URI.
         """
         root = self.root.rstrip("/")
         if self.workspace_path:
             workspace_path = self.workspace_path.lstrip("/")
+            if self.file_name:
+                return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
             return f"{self.prefix}{root}/{workspace_path}"
+        if self.file_name:
+            return f"{self.prefix}{root}/{self.file_name}"
         return f"{self.prefix}{root}"
 
 
@@ -60,46 +71,58 @@ class FileSystem(Protocol):
 
     def exists(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> bool: ...
 
     def is_file(
         self,
-    ): ...
+    ) -> bool: ...
 
     def is_absolute(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> bool: ...
 
     def mkdir(
         self,
-    ): ...
+        parents: bool = True,
+        exist_ok: bool = True,
+    ) -> None: ...
 
     def read_text(
         self,
-    ): ...
+        encoding: Optional[str] = "utf-8",
+    ) -> str: ...
 
     def open(
         self,
-    ): ...
+        mode: str = "r",
+        encoding: Optional[str] = "utf-8",
+    ) -> IO: ...
 
     def glob(
         self,
-    ): ...
+        specific_pattern: str,
+    ) -> list[str]: ...
 
     def expand_user(
         self,
-    ): ...
+    ) -> str | Path: ...
 
     def resolve(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> str | Path: ...
 
     def spec_from_file_location(
         self,
+        module_name: str,
     ): ...
 
     def file_handler(
         self,
+        file_name: str,
+        encoding: str,
     ): ...
 
 
@@ -124,121 +147,268 @@ class LocalFileSystem:
 
         Parameters
         ----------
-        setup : FileSystemSetUp
+        ``setup`` : FileSystemSetUp
             The setup information containing the prefix, root, and workspace path.
         """
         root = Path(setup.root)
-        self.path = root / setup.workspace_path if setup.workspace_path else root
+        self.dir_path: Path = (
+            root / setup.workspace_path if setup.workspace_path else root
+        )
+        self.data_path: Path | None = (
+            self.dir_path / setup.file_name if setup.file_name else None
+        )
 
     def exists(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> bool:
+        """
+        Check if the path exists in the local file system.
+
+        This utilises the pathlib Path.exists() method.
+
+        Returns
+        -------
+        ``bool``
+            True if the path exists, False otherwise.
+
+        Raises
+        ------
+        ValueError
+            If the type specified is not 'dir' or 'data'.
+        """
+        if type == "dir":
+            return self.dir_path.exists()
+        elif type == "data":
+            if self.data_path:
+                return self.data_path.exists()
+            else:
+                raise ValueError(
+                    "Data path is not set. Cannot check existence of data file."
+                )
+        else:
+            raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
 
     def is_file(
         self,
-    ): ...
+    ) -> bool:
+        """
+        Checks if the path is a file in the local file system.
+        This utilises the pathlib Path.is_file() method.
+
+        Returns
+        -------
+        ``bool``
+            True if the path is a file, False otherwise.
+        """
+        if self.data_path:
+            return self.data_path.is_file()
+        else:
+            raise ValueError("Data path is not set. Cannot check if it is a file.")
 
     def is_absolute(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> bool:
+        """
+        Checks if the path is an absolute path in the local file system.
+        This utilises the pathlib Path.is_absolute() method.
+
+        Returns
+        -------
+        ``bool``
+            True if the path is absolute, False otherwise.
+        """
+        if type == "dir":
+            return self.dir_path.is_absolute()
+        elif type == "data":
+            if self.data_path:
+                return self.data_path.is_absolute()
+            else:
+                raise ValueError(
+                    "Data path is not set. Cannot check if it is absolute."
+                )
+        else:
+            raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,
-    ): ...
-
-    def read_text(
-        self,
-    ): ...
-
-    def open(
-        self,
-    ): ...
-
-    def glob(
-        self,
-    ): ...
-
-    def expand_user(
-        self,
-    ): ...
-
-    def resolve(
-        self,
-    ): ...
-
-    def spec_from_file_location(
-        self,
-    ): ...
-
-    def file_handler(
-        self,
-    ): ...
-
-
-# TODO: edit this docstring with whether Boto3 or Spark is used
-class S3FileSystem:
-    """
-    A class that holds methods for interacting with the S3 file system.
-    This class will utilise Boto3/Spark methodology to create, read, and write to
-    the S3 file system.
-
-    This class is part of the FileSystem Protocol.
-    """
-
-    def __init__(self, setup: FileSystemSetUp):
+        parents: bool = True,
+        exist_ok: bool = True,
+    ) -> None:
         """
-        Initialize the S3FileSystem with the provided setup.
+        Creates a directory at the specified path in the local file system.
 
         Parameters
         ----------
-        setup : FileSystemSetUp
-            The setup information containing the prefix, root, and workspace path.
+        ``parents`` : bool, default = True
+            If True, create parent directories as needed. If False, raise an error if
+            the parent directory does not exist.
+        ``exist_ok`` : bool, default = True
+            If True, do not raise an error if the target directory already exists.
         """
-        self.path = setup.create_uri()
-
-    def exists(
-        self,
-    ): ...
-
-    def is_file(
-        self,
-    ): ...
-
-    def is_absolute(
-        self,
-    ): ...
-
-    def mkdir(
-        self,
-    ): ...
+        self.dir_path.mkdir(parents=parents, exist_ok=exist_ok)
 
     def read_text(
         self,
-    ): ...
+        encoding: Optional[str] = "utf-8",
+    ) -> str:
+        """
+        Read the content of the data file as text.
+
+        Parameters
+        ----------
+        ``encoding`` : Optional[str], default = "utf-8"
+            The encoding to use when reading the file.
+
+        Returns
+        -------
+        ``str``
+            The content of the data file as a string.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot read text from a file.")
+        return self.data_path.read_text(encoding=encoding)
 
     def open(
         self,
-    ): ...
+        mode: str = "r",
+        encoding: Optional[str] = "utf-8",
+    ) -> IO:
+        """
+        Open the data file in the local file system.
+
+        Parameters
+        ----------
+        ``mode`` : str, default = "r"
+            The method in which to open the file (e.g., "r" for reading, "w" for writing).
+        ``encoding`` : Optional[str], default = "utf-8"
+            The encoding to use when opening the file.
+
+        Returns
+        -------
+        ``IO``
+            A file object corresponding to the opened file.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot open a file.")
+        file = self.data_path
+        return open(file, mode=mode, encoding=encoding)
 
     def glob(
         self,
-    ): ...
+        specific_pattern: str,
+    ) -> list:
+        """
+        Perform a glob operation on the directory path in the local file system
+        to identify files matching the string input.
+
+        Parameters
+        ----------
+        ``specific_pattern`` : str
+            The glob pattern to match files against (e.g., "*.txt" for all text files).
+
+        Returns
+        -------
+        ``list``
+            A list of paths matching the glob pattern.
+        """
+        output = glob.glob(str(self.dir_path / specific_pattern))
+        return output
 
     def expand_user(
         self,
-    ): ...
+    ) -> Path:
+        """
+        Expands the user tilde (~) in the path.
+
+        Returns
+        -------
+        ``Path``
+            The path with the user tilde expanded.
+        """
+        return (
+            self.data_path.expanduser()
+            if self.data_path
+            else self.dir_path.expanduser()
+        )
 
     def resolve(
         self,
-    ): ...
+        type: str,  # dir or data
+    ) -> Path:
+        """
+        Resolves the filepath to an absolute path.
+
+        Parameters
+        ----------
+        ``type`` : str
+            The type of path to resolve. Should be either 'dir' for the directory path
+            or 'data' for the data file path.
+
+        Returns
+        -------
+        ``Path``
+            The resolved absolute path.
+
+        Raises
+        ------
+        ``ValueError``
+            If the type specified is not 'dir' or 'data'.
+        """
+        if type == "dir":
+            return self.dir_path.resolve()
+        elif type == "data":
+            if self.data_path:
+                return self.data_path.resolve()
+            else:
+                raise ValueError("Data path is not set. Cannot resolve data path.")
+        else:
+            raise ValueError("Invalid type. Expected 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
-    ): ...
+        module_name: str,
+    ) -> ModuleSpec | None:
+        """
+        Get the module spec from the file location.
+
+        Parameters
+        ----------
+        ``module_name`` : str
+            The name of the module.
+
+        Returns
+        -------
+        ``ModuleSpec`` or None
+            The module spec corresponding to the data file, or None if it cannot be determined.
+        """
+        return importlib.util.spec_from_file_location(module_name, str(self.data_path))
 
     def file_handler(
         self,
-    ): ...
+        file_name: str,
+        encoding: str,
+    ):
+        """
+        Get a file handler for the specified file in the directory.
+
+        Parameters
+        ----------
+        ``file_name`` : str
+            The name of the file for which to create the handler.
+        ``encoding`` : str
+            The encoding to use for the file handler.
+
+        Returns
+        -------
+        ``logging.FileHandler``
+            A file handler for the specified file.
+        """
+        return logging.FileHandler(str(self.dir_path / file_name), encoding=encoding)
+
+
+# TODO: add a FileSystem for S3 when LFS one is stable
 
 
 class FileSystemFactory:
@@ -251,9 +421,9 @@ class FileSystemFactory:
 
         Parameters
         ----------
-        prefix : str
+        ``prefix`` : str
             The prefix associated with the file system (e.g., 's3a://', 'file://').
-        fs_class : Type[FileSystem]
+        ``fs_class`` : Type[FileSystem]
             The class implementing the FileSystem protocol.
         """
         cls._registry[prefix] = fs_class
@@ -265,17 +435,17 @@ class FileSystemFactory:
 
         Parameters
         ----------
-        setup : FileSystemSetUp
+        ``setup`` : FileSystemSetUp
             The setup information containing the prefix and other details.
 
         Returns
         -------
-        FileSystem
+        ``FileSystem``
             An instance of the appropriate file system class.
 
         Raises
         ------
-        ValueError
+        ``ValueError``
             If no registered file system class is found for the given prefix.
         """
         fs_class = cls._registry.get(setup.prefix)
@@ -288,4 +458,3 @@ class FileSystemFactory:
 
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file://", LocalFileSystem)
-FileSystemFactory.register("s3a://", S3FileSystem)
