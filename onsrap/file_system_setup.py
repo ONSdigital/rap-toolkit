@@ -158,6 +158,35 @@ class LocalFileSystem:
             self.dir_path / setup.file_name if setup.file_name else None
         )
 
+    def __str__(self) -> str:
+        """
+        Return a string representation of the LocalFileSystem.
+
+        Returns
+        -------
+        ``str``
+            A string representation of the LocalFileSystem, including the directory
+            and data paths.
+        """
+        return (
+            f"Local File System:\n"
+            f"Directory Path: {self.dir_path}\nData Path: {self.data_path}"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the LocalFileSystem.
+
+        Returns
+        -------
+        ``str``
+            A detailed string representation of the LocalFileSystem, including the
+            directory and data paths.
+        """
+        return (
+            f"LocalFileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
+        )
+
     def exists(
         self,
         type: str,  # dir or data
