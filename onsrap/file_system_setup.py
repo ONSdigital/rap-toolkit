@@ -535,6 +535,27 @@ class FileSystemFactory:
             )
         return fs_class(setup)
 
+    @classmethod
+    def update(cls, path: str, fs: FileSystem) -> tuple[FileSystem, FileSystemSetUp]:
+        """
+        Update the file system instance with a new setup.
+
+        Parameters
+        ----------
+        ``setup`` : FileSystemSetUp
+            The new setup information.
+        ``fs`` : FileSystem
+            The existing file system instance to update.
+
+        Returns
+        -------
+        ``FileSystem``
+            An updated instance of the appropriate file system class.
+        """
+        setup = FileSystemSetUp.from_str(path)
+        fs = cls.create(setup)
+        return fs, setup
+
 
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file://", LocalFileSystem)
