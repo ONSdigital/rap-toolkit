@@ -1154,6 +1154,10 @@ class Pipeline:
                 output_path_file_system = FileSystemFactory.create(output_path_fs_setup)
                 if not output_path_file_system.is_absolute("dir"):
                     output_path = str(self.config.work_dir) + "/" + output_path
+                    output_path_fs_setup = FileSystemSetUp.from_str(output_path)
+                    output_path_file_system = FileSystemFactory.create(
+                        output_path_fs_setup
+                    )
 
                 exists = output_path_file_system.exists("dir")
                 overwrite = bool(self.config.overwrite)
