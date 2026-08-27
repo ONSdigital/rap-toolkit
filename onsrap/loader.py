@@ -8,13 +8,17 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import StageConfigurationError, StageLoadError
 from .models import PipelineRun
 
 PREFERRED_ENTRYPOINTS = ("run", "main", "execute")
 
 
-def discover_python_entrypoint(path: Path) -> str | None:
+def discover_python_entrypoint(
+    path: FileSystemSetUp,
+) -> str | None:
     """
     Inspect a Python stage file and return the preferred callable entrypoint name.
 
@@ -27,8 +31,8 @@ def discover_python_entrypoint(path: Path) -> str | None:
 
     Parameters
     ----------
-    ``path`` : Path
-        File path for the stage being run.
+    ``path`` : FileSystemSetUp
+        File system setup for the stage being run.
 
     Returns
     -------
@@ -44,17 +48,19 @@ def discover_python_entrypoint(path: Path) -> str | None:
         If the file path requested for the ``Stage`` does not exist.
     """
 
-    file_path = Path(path)
-    if not file_path.exists():
+    file_system = FileSystemFactory.create(path)
+    if not file_system.exists(type="data"):
         raise StageConfigurationError(
-            "Stage source file does not exist: {0}".format(file_path)
+            "Stage source file does not exist in the data path: {0}".format(file_system)
         )
 
     try:
-        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+        tree = ast.parse(
+            file_system.read_text(encoding="utf-8"), filename=str(path.create_uri())
+        )
     except (OSError, SyntaxError) as exc:
         raise StageConfigurationError(
-            "Unable to inspect Python stage file {0}: {1}".format(file_path, exc)
+            "Unable to inspect Python stage file {0}: {1}".format(file_system, exc)
         ) from exc
 
     defined_functions = {
@@ -69,7 +75,7 @@ def discover_python_entrypoint(path: Path) -> str | None:
     return None
 
 
-def load_python_callable(path: Path, entrypoint: str) -> Any:
+def load_python_callable(path: FileSystemSetUp, entrypoint: str) -> Any:
     """
     Import a stage module and return the named callable from it.
 
@@ -81,8 +87,8 @@ def load_python_callable(path: Path, entrypoint: str) -> Any:
 
     Parameters
     ----------
-    ``path`` : Path
-        The file path for the stage being run.
+    ``path`` : FileSystemSetUp
+        The file system setup for the stage being run.
     ``entrypoint`` : str
         The name of the entrypoint function defined in the stage script.
 
@@ -107,7 +113,7 @@ def load_python_callable(path: Path, entrypoint: str) -> Any:
     return target
 
 
-def load_python_module(path: Path) -> ModuleType:
+def load_python_module(path: FileSystemSetUp) -> ModuleType:
     """
     Import a Python stage file as an isolated module object.
 
@@ -123,7 +129,7 @@ def load_python_module(path: Path) -> ModuleType:
 
     Parameters
     ----------
-    ``path`` : Path
+    ``path`` : str
         The path for the stage.
 
     Returns
@@ -137,17 +143,27 @@ def load_python_module(path: Path) -> ModuleType:
         If the file is unable to be imported so callers can report a stage-specific
         problem rather than a raw import exception.
     """
-    file_path = Path(path)
-    if not file_path.exists():
-        raise StageLoadError("Stage source file does not exist: {0}".format(file_path))
+    file_system = FileSystemFactory.create(path)
+    if path.file_name is None:
+        raise StageLoadError(
+            "No file name has been provided for the stage: {0}".format(file_system)
+        )
+    if not file_system.exists(type="data"):
+        raise StageLoadError(
+            "Stage source file does not exist in the data path: {0}".format(file_system)
+        )
 
     module_name = "onsrap_stage_{0}_{1}".format(
-        file_path.stem,
-        hashlib.sha256(str(file_path.resolve()).encode("utf-8")).hexdigest()[:12],
+        Path(path.file_name).stem,
+        hashlib.sha256(
+            str(file_system.resolve(type="data")).encode("utf-8")
+        ).hexdigest()[:12],
     )
-    spec = importlib.util.spec_from_file_location(module_name, str(file_path))
+    spec = file_system.spec_from_file_location(module_name)
     if spec is None or spec.loader is None:
-        raise StageLoadError("Unable to create a module spec for {0}".format(file_path))
+        raise StageLoadError(
+            "Unable to create a module spec for {0}".format(file_system)
+        )
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -157,7 +173,7 @@ def load_python_module(path: Path) -> ModuleType:
     except Exception as exc:
         sys.modules.pop(module_name, None)
         raise StageLoadError(
-            "Failed to import Python stage file {0}: {1}".format(file_path, exc)
+            "Failed to import Python stage file {0}: {1}".format(file_system, exc)
         ) from exc
 
     return module

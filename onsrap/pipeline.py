@@ -11,6 +11,8 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from onsrap.file_system_setup import FileSystemSetUp
+
 from .errors import (
     HistoricalPipelineLoadError,
     PipelineConfigurationError,
@@ -742,8 +744,11 @@ class Pipeline:
         if callable(stage):
             return Stage.from_callable(stage)
 
-        if isinstance(stage, (str, Path)):
-            return Stage.from_file(stage)
+        if isinstance(stage, Path):
+            return Stage.from_file(FileSystemSetUp.from_path(stage))
+
+        if isinstance(stage, str):
+            return Stage.from_file(FileSystemSetUp.from_str(stage))
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -1293,6 +1298,8 @@ class Pipeline:
         source = self._resolve_stage_source(
             stage_name=str(stage_name), location=location, work_dir=work_dir
         )
+
+        source = FileSystemSetUp.from_path(source)
         return Stage.from_file(
             source,
             name=str(stage_name),
@@ -1497,6 +1504,7 @@ class Pipeline:
             stage_dependencies = cls._dependencies_for_stage(
                 stage_name, path, dependencies
             )
+            path = FileSystemSetUp.from_path(path)
             stages.append(
                 Stage.from_file(
                     path,
@@ -1915,7 +1923,7 @@ class Pipeline:
     @staticmethod
     def _dependencies_for_stage(
         stage_name: str,
-        path: Path | Callable[..., Any] | None = None,
+        path: FileSystemSetUp | Path | Callable[..., Any] | str | None = None,
         dependencies: Mapping[str, Sequence[str]] | None = None,
     ) -> tuple[str, ...]:
         """
@@ -1929,8 +1937,8 @@ class Pipeline:
         ----------
         ``stage_name`` : str
             The name of the stage that you are extracting the ``dependencies`` for.
-        ``path`` : Path
-            The filepath for the stage source.
+        ``path`` : FileSystemSetUp, Path, Callable[..., Any], str, or None
+            The file system setup, path, callable, or string for the stage source.
         ``dependencies`` : Mapping[str, Sequence[str]] or None
             Mapping of the stage source name to their relevant ``dependencies`` (stages
             required to run before the ``stage_name`` Stage).

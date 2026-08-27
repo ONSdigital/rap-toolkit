@@ -109,6 +109,12 @@ class FileSystem(Protocol):
     system that we expect an interaction with to allow seamless integration.
     """
 
+    @property
+    def data_path(self) -> Path | str | None: ...
+
+    @property
+    def dir_path(self) -> Path | str: ...
+
     def __init__(
         self,
         setup: FileSystemSetUp,

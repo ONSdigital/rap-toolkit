@@ -4,6 +4,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Optional
 
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import StageConfigurationError, StageDependencyError
 
 if TYPE_CHECKING:
@@ -64,10 +66,10 @@ class Stage:
     ----------
     ``name`` : str
         The name of the Stage being run.
-    ``source`` : Path, Callable, or None
+    ``source`` : FileSystemSetUp, Path, Callable, str, or None
         Item being implemented in this Stage. E.g. a file path to a Python script
-        or a function being executed directly. The full file path is gathered if
-        a path is used.
+        stored as a FileSystemSetUp object or a function being executed directly.
+        The full file path is gathered if a path is used.
     ``dependencies`` : tuple of strings
         Names of stages that must be completed before this stage is attempted. These
         are cleaned post initialisation to remove leading/trailing whitespace.
@@ -85,7 +87,7 @@ class Stage:
     """
 
     name: str
-    source: Path | Callable[..., Any] | None = None
+    source: FileSystemSetUp | Path | Callable[..., Any] | str | None = None
     dependencies: tuple[str, ...] = field(default_factory=tuple)
     metadata: dict[str, Any] = field(default_factory=dict)
     entrypoint: Optional[str] = None
@@ -97,12 +99,21 @@ class Stage:
             raise StageConfigurationError("Stage name cannot be empty.")
 
         if isinstance(self.source, str):
-            self.source = Path(self.source).expanduser()
+            self.source = FileSystemSetUp.from_str(self.source)
+            assert isinstance(self.source, FileSystemSetUp)
+            source_file_system = FileSystemFactory.create(self.source)
+            self.source = source_file_system.expand_user()
+        elif isinstance(self.source, FileSystemSetUp):
+            source_file_system = FileSystemFactory.create(self.source)
+            self.source = source_file_system.expand_user()
         elif isinstance(self.source, Path):
-            self.source = self.source.expanduser()
+            self.source = FileSystemSetUp.from_path(self.source)
+            assert isinstance(self.source, FileSystemSetUp)
+            source_file_system = FileSystemFactory.create(self.source)
+            self.source = source_file_system.expand_user()
         elif self.source is not None and not callable(self.source):
             raise StageConfigurationError(
-                "Stage source must be a path, callable, or None."
+                "Stage source must be a FileSystemSetUp, Path, string, callable, or None."
             )
 
         self.dependencies = _normalize_dependencies(self.dependencies)
@@ -144,7 +155,7 @@ class Stage:
     @classmethod
     def from_file(
         cls,
-        file_path: str | Path,
+        file_path: FileSystemSetUp,
         *,
         name: str | None = None,
         dependencies: Iterable[str] | str | None = None,
@@ -160,18 +171,17 @@ class Stage:
 
         Parameters
         ----------
-        ``file_path`` : str or Path
-            The name or file path for the script that the ``Stage`` will be running.
-        ``name`` : str
-            The name of the ``Stage``
-        ``dependencies`` : Iterable[str], str, or None
-            The Stage/s that need to be complete before the ``Stage`` currently attempted.
-        ``metadata`` : Mapping[str, Any], or None
-            Any supporting information for the ``Stage`` being run.
-        ``entrypoint`` : str or None
-            The name of the first script for the Stage.
-        ``backend``: str, default = "python"
-            The system that the ``Stage`` is run on.
+        if not file_path.exists(type="data"):
+            raise StageConfigurationError(f"Stage source file does not exist: {file_path}")
+
+        return cls(
+            name=name or file_path.file_name.stem,
+            source=file_path,
+            dependencies=_normalize_dependencies(dependencies),
+            metadata=dict(metadata or {}),
+            entrypoint=entrypoint,
+            backend=backend,
+        )
 
         Raises
         ------
@@ -183,13 +193,16 @@ class Stage:
         Stage
             Stage class instance with cleaned/checked file path, dependencies, and metadata
         """
-        path = Path(file_path).expanduser()
-        if not path.exists():
+        file_system = FileSystemFactory.create(file_path)
+        path = file_system.expand_user()
+        if not file_system.exists(type="data"):
             raise StageConfigurationError(f"Stage source file does not exist: {path}")
 
         return cls(
-            name=name or path.stem,
-            source=path.resolve(),
+            name=name or file_path.file_name
+            if file_path.file_name is not None
+            else "stage",
+            source=path,
             dependencies=_normalize_dependencies(dependencies),
             metadata=dict(metadata or {}),
             entrypoint=entrypoint,

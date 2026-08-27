@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from onsrap.file_system_setup import FileSystemSetUp
 from onsrap.warnings import StageConfigurationWarning
 
 from .errors import (
@@ -52,6 +53,8 @@ class ExecutionContext:
         The logger used for this pipeline run.
     ``run_dir``: Path
         The directory that the run saved to.
+    ``file_system`` : FileSystem
+        The file system used for this pipeline run.
     ``started_at`` : datetime, default = current time
         The time that the pipeline run started.
     ``working_directory`` : Path, default = current working directory
@@ -182,6 +185,7 @@ class ExecutionContext:
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
+    # TODO: This needs to shift based on file system
     def get_data_dir(self) -> Path:
         """
         Establishes the filepath that the data is held in.
@@ -198,6 +202,7 @@ class ExecutionContext:
             "Please parse a PipelineConfig instance to the ExecutionContext."
         )
 
+    # TODO: This needs to shift based on file system
     def resolve_output_root(self) -> Path:
         """
         Establishes the filepath that the outputs are going to be saved to.
@@ -259,6 +264,7 @@ class ExecutionContext:
             return stage_config.variables
         return stage_config
 
+    # TODO: This needs to shift based on file system
     def resolve_given_path(
         self,
         stage_name: str | None,
@@ -434,6 +440,7 @@ class PythonStageExecutor:
                 stage, context, stage.source, stage.source_label
             )
 
+        # TODO: This needs to shift based on file system
         if isinstance(stage.source, Path):
             return self._execute_file(stage, context)
 
@@ -560,10 +567,17 @@ class PythonStageExecutor:
         ``StageExecutionError``
             If the entrypoint is not found.
         """
-        path = stage.source
-        assert isinstance(path, Path)
 
-        if path.suffix.lower() == ".py":
+        # TODO: This needs to shift based on file system
+        path = stage.source
+        if isinstance(path, str):
+            path = FileSystemSetUp.from_str(path)
+        elif isinstance(path, Path):
+            path = FileSystemSetUp.from_path(path)
+
+        assert isinstance(path, FileSystemSetUp)
+
+        if path.file_name and path.file_name.lower().endswith(".py"):
             entrypoint = stage.entrypoint or discover_python_entrypoint(path)
             if entrypoint is not None:
                 try:
