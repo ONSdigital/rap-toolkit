@@ -11,7 +11,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from onsrap.file_system_setup import FileSystemSetUp
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import (
     HistoricalPipelineLoadError,
@@ -1149,11 +1149,13 @@ class Pipeline:
                 if not output_dir:
                     continue
 
-                output_path = Path(output_dir)
-                if not output_path.is_absolute():
-                    output_path = self.config.work_dir / output_path
+                output_path = str(output_dir)
+                output_path_fs_setup = FileSystemSetUp.from_str(output_path)
+                output_path_file_system = FileSystemFactory.create(output_path_fs_setup)
+                if not output_path_file_system.is_absolute("dir"):
+                    output_path = str(self.config.work_dir) + "/" + output_path
 
-                exists = output_path.exists()
+                exists = output_path_file_system.exists("dir")
                 overwrite = bool(self.config.overwrite)
 
                 if exists and not overwrite:
