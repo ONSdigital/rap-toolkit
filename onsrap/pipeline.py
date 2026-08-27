@@ -1631,17 +1631,19 @@ class Pipeline:
         if isinstance(config, Mapping):
             return dict(config)
 
-        config_path = Path(config).expanduser()
-        if config_path.suffix.lower() not in ACCEPTED_CONFIG_TYPES:
+        config_fs_setup = FileSystemSetUp.from_str(str(config))
+        config_file_system = FileSystemFactory.create(config_fs_setup)
+        config_path = config_file_system.expand_user()
+        if Path(config_fs_setup.file_name).suffix.lower() not in ACCEPTED_CONFIG_TYPES:
             raise StageConfigurationError(
                 f"Unsupported config file format parsed as Stage Configuration: {config!r}."
             )
-        if not config_path.exists():
+        if not config_file_system.exists(type="data"):
             raise FileNotFoundError(f"Config file does not exist: {config_path}")
 
         import yaml
 
-        raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        raw_config = yaml.safe_load(config_file_system.read_text())
         if raw_config is None:
             warnings.warn(
                 "No configuration has loaded from the configuration file. Please check "
