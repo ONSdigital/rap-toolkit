@@ -158,7 +158,7 @@ class FileSystem(Protocol):
 
     def expand_user(
         self,
-    ) -> FileSystemSetUp | str | Path: ...
+    ) -> str: ...
 
     def resolve(
         self,
@@ -398,7 +398,7 @@ class LocalFileSystem:
 
     def expand_user(
         self,
-    ) -> Path:
+    ) -> str:
         """
         Expands the user tilde (~) in the path.
 
@@ -408,9 +408,9 @@ class LocalFileSystem:
             The path with the user tilde expanded.
         """
         return (
-            self.data_path.expanduser()
+            str(self.data_path.expanduser())
             if self.data_path
-            else self.dir_path.expanduser()
+            else str(self.dir_path.expanduser())
         )
 
     def resolve(

@@ -1304,8 +1304,17 @@ class Pipeline:
         source = self._resolve_stage_source(
             stage_name=str(stage_name), location=location, work_dir=work_dir
         )
+        if isinstance(source, Path):
+            source = FileSystemSetUp.from_path(source)
 
-        source = FileSystemSetUp.from_path(source)
+        if isinstance(source, str):
+            source = FileSystemSetUp.from_str(source)
+
+        if not source:
+            raise StageConfigurationError(
+                f"Stage '{stage_name}' has no source location defined."
+            )
+
         return Stage.from_file(
             source,
             name=str(stage_name),
@@ -1908,7 +1917,9 @@ class Pipeline:
         return stage_configs
 
     @staticmethod
-    def _resolve_stage_source(stage_name: str, location: Any, work_dir: Path) -> Path:
+    def _resolve_stage_source(
+        stage_name: str, location: Any, work_dir: Path
+    ) -> Path | str | None:
         """
         Resolve the source path for a configured stage.
 
@@ -1916,14 +1927,22 @@ class Pipeline:
         paths are first interpreted as given and then relative to ``work_dir``.
         """
         if location in (None, ""):
-            return work_dir / "scripts" / f"{stage_name}.py"
+            return str(work_dir) + "/scripts/" + f"{stage_name}.py"
 
-        candidate = Path(location).expanduser()
-        if candidate.is_absolute() or candidate.exists():
-            return candidate
+        candidate = str(location)
+        candidate_fs_setup = FileSystemSetUp.from_str(candidate)
+        candidate_fs = FileSystemFactory.create(candidate_fs_setup)
+        candidate = candidate_fs.expand_user()
+        candidate_fs, candidate_fs_setup = FileSystemFactory.update(
+            candidate, candidate_fs
+        )
+        if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
+            return candidate_fs.data_path
 
-        work_dir_candidate = work_dir / candidate
-        if work_dir_candidate.exists():
+        work_dir_candidate = str(work_dir) + "/" + candidate
+        work_dir_candidate_fs_setup = FileSystemSetUp.from_str(work_dir_candidate)
+        work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
+        if work_dir_candidate_fs.exists(type="data"):
             return work_dir_candidate
 
         return candidate
