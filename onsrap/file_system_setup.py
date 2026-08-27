@@ -56,6 +56,51 @@ class FileSystemSetUp:
             return f"{self.prefix}{root}/{self.file_name}"
         return f"{self.prefix}{root}"
 
+    @classmethod
+    def from_str(cls, uri: str):
+        """
+        Derive a FileSystemSetUp object from a URI string.
+
+        Parameters
+        ----------
+        ``uri`` : str
+            The URI string to parse.
+
+        Returns
+        -------
+        ``FileSystemSetUp``
+            The derived FileSystemSetUp object.
+        """
+        prefix = uri.split("://")[0] + "://"
+        sub_parts = uri.split("://")[1].split("/")
+        file_name = sub_parts[-1] if "." in sub_parts[-1] else None
+        subparts_no_file_name = sub_parts.pop() if file_name else sub_parts
+        root = sub_parts[0]  # S3 bucket or home directory
+        workspace_path = (
+            "/".join(subparts_no_file_name) if subparts_no_file_name else None
+        )
+        return FileSystemSetUp(
+            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+        )
+
+    @classmethod
+    def from_path(cls, path: Path):
+        """
+        Derive a FileSystemSetUp object from a Path object.
+
+        Parameters
+        ----------
+        ``path`` : Path
+            The Path object to parse.
+
+        Returns
+        -------
+        ``FileSystemSetUp``
+            The derived FileSystemSetUp object.
+        """
+        string_path = str(path)
+        return cls.from_str(string_path)
+
 
 class FileSystem(Protocol):
     """
@@ -107,7 +152,7 @@ class FileSystem(Protocol):
 
     def expand_user(
         self,
-    ) -> str | Path: ...
+    ) -> FileSystemSetUp | str | Path: ...
 
     def resolve(
         self,
