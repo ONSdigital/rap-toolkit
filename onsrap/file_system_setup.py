@@ -1,10 +1,14 @@
 import glob
 import importlib.util
 import logging
+import re
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import IO, Optional, Protocol, Type
+from urllib.parse import urlparse
+
+WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
 @dataclass
@@ -100,6 +104,82 @@ class FileSystemSetUp:
         """
         string_path = str(path)
         return cls.from_str(string_path)
+
+    def _classification(self, input: str) -> str:
+        """
+        Classify whether the input is already in a URI format.
+        This works based on the assumption that any filepaths that do not have a
+        specified URI prefix are local file systems.
+
+        Parameters
+        ----------
+        ``input`` : Path | str
+            The input path to classify.
+
+        Returns
+        -------
+        ``str``
+            The classification of the input path to be used in normalisation.
+        """
+
+        assert isinstance(input, str), "Input must be a string or Path object."
+
+        text = input.strip()
+        if not text:
+            raise ValueError("Input path cannot be empty or whitespace.")
+
+        if WINDOWS_DRIVE_RE.match(text):
+            return "local str"
+
+        parsed = urlparse(text)
+        if parsed.scheme:
+            if parsed.scheme == "file":
+                return "local str"
+            return "remote uri"
+
+        try:
+            Path(text)
+            return "local str"
+        except Exception:
+            pass
+
+        raise ValueError(f"Input path {input} is not a valid local path or URI.")
+
+    def _normalisation(self, input: Path | str) -> str:
+        """
+        Normalise the input path to a URI format before coersion into a FileSystemSetUp
+        object.
+
+        Parameters
+        ----------
+        ``input`` : Path | str
+            The input path to normalise.
+
+        Returns
+        -------
+        ``str``
+            The normalised URI string.
+        """
+        if isinstance(input, Path):
+            input = input.expanduser()
+            input = input.resolve()
+            assert input.is_absolute(), "Path must be absolute."
+            return input.as_uri()
+
+        if not isinstance(input, str):
+            raise TypeError("Input must be a string or Path object.")
+
+        classification = self._classification(input)
+
+        if classification == "local str":
+            input = Path(input).expanduser()
+            input = input.resolve()
+            assert input.is_absolute(), "Path must be absolute."
+            return input.as_uri()
+        elif classification == "remote uri":
+            return input
+        else:
+            raise ValueError(f"Unknown classification for input: {input}")
 
 
 class FileSystem(Protocol):
