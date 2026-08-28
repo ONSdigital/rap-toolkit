@@ -1919,7 +1919,7 @@ class Pipeline:
     @staticmethod
     def _resolve_stage_source(
         stage_name: str, location: Any, work_dir: Path
-    ) -> Path | str | None:
+    ) -> FileSystemSetUp | Path | str | None:
         """
         Resolve the source path for a configured stage.
 

@@ -4,9 +4,9 @@ import logging
 import re
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import IO, Optional, Protocol, Type
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse, urlsplit
 
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
@@ -75,14 +75,8 @@ class FileSystemSetUp:
         ``FileSystemSetUp``
             The derived FileSystemSetUp object.
         """
-        prefix = uri.split("://")[0] + "://"
-        sub_parts = uri.split("://")[1].split("/")
-        file_name = sub_parts[-1] if "." in sub_parts[-1] else None
-        subparts_no_file_name = sub_parts.pop() if file_name else sub_parts
-        root = sub_parts[0]  # S3 bucket or home directory
-        workspace_path = (
-            "/".join(subparts_no_file_name) if subparts_no_file_name else None
-        )
+        normalised_uri = cls._normalisation(uri)
+        prefix, root, workspace_path, file_name = cls._uri_to_parts(normalised_uri)
         return FileSystemSetUp(
             prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
         )
@@ -102,10 +96,14 @@ class FileSystemSetUp:
         ``FileSystemSetUp``
             The derived FileSystemSetUp object.
         """
-        string_path = str(path)
-        return cls.from_str(string_path)
+        normalised_path = cls._normalisation(path)
+        prefix, root, workspace_path, file_name = cls._uri_to_parts(normalised_path)
+        return FileSystemSetUp(
+            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+        )
 
-    def _classification(self, input: str) -> str:
+    @staticmethod
+    def _classification(input: str) -> str:
         """
         Classify whether the input is already in a URI format.
         This works based on the assumption that any filepaths that do not have a
@@ -145,7 +143,8 @@ class FileSystemSetUp:
 
         raise ValueError(f"Input path {input} is not a valid local path or URI.")
 
-    def _normalisation(self, input: Path | str) -> str:
+    @staticmethod
+    def _normalisation(input: Path | str) -> str:
         """
         Normalise the input path to a URI format before coersion into a FileSystemSetUp
         object.
@@ -169,7 +168,7 @@ class FileSystemSetUp:
         if not isinstance(input, str):
             raise TypeError("Input must be a string or Path object.")
 
-        classification = self._classification(input)
+        classification = FileSystemSetUp._classification(input)
 
         if classification == "local str":
             input = Path(input).expanduser()
@@ -180,6 +179,64 @@ class FileSystemSetUp:
             return input
         else:
             raise ValueError(f"Unknown classification for input: {input}")
+
+    @staticmethod
+    def _uri_to_parts(uri: str) -> tuple[str, str, str | None, str | None]:
+        """
+        Convert a URI into:
+        (prefix, root, workspace_path, file_name)
+
+        Parameters
+        ----------
+        ``uri`` : str
+            The URI string to parse.
+
+        Returns
+        -------
+        ``tuple[str, str, str | None, str | None]``
+            A tuple containing the prefix, root, workspace path, and file name.
+
+        Raises
+        ------
+        ``ValueError``
+            If the URI does not contain a scheme.
+        """
+        parsed = urlsplit(uri)
+        if not parsed.scheme:
+            raise ValueError(f"Expected URI with scheme, got: {uri!r}")
+
+        prefix = f"{parsed.scheme}://"
+
+        # Decode escaped characters and split path robustly
+        raw_path = unquote(parsed.path or "")
+        path_parts = [p for p in PurePosixPath(raw_path).parts if p not in ("/", "")]
+
+        # file:// handling
+        if parsed.scheme == "file":
+            # Windows file URI: file:///C:/...
+            if path_parts and path_parts[0].endswith(":"):
+                root = path_parts[0]  # C:
+                tail = path_parts[1:]
+            # UNC form: file://server/share/...
+            elif parsed.netloc:
+                if path_parts:
+                    root = f"//{parsed.netloc}/{path_parts[0]}"
+                    tail = path_parts[1:]
+                else:
+                    root = f"//{parsed.netloc}"
+                    tail = []
+            # POSIX form: file:///home/...
+            else:
+                root = "/"
+                tail = path_parts
+        else:
+            # Cloud URIs like s3://bucket/key...
+            root = parsed.netloc
+            tail = path_parts
+
+        file_name = tail[-1] if tail and "." in tail[-1] else None
+        workspace_path = "/".join(tail[:-1] if file_name else tail) or None
+        return prefix, root, workspace_path, file_name
 
 
 class FileSystem(Protocol):
