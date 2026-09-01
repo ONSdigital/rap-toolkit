@@ -128,6 +128,7 @@ class FileSystemSetUp:
             The classification of the input path to be used in normalisation.
         """
 
+        # TODO: fix for string AND path rather than just string
         assert isinstance(input, str), "Input must be a string or Path object."
 
         text = input.strip()

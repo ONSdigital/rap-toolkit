@@ -179,7 +179,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     return module
 
 
-def load_historical_run(run_dir: Path) -> PipelineRun:
+def load_historical_run(run_dir: FileSystemSetUp) -> PipelineRun:
     """
     Load a previously executed pipeline run from a YAML file.
 
@@ -188,18 +188,20 @@ def load_historical_run(run_dir: Path) -> PipelineRun:
     ``PipelineRun``
         An instance of ``PipelineRun`` representing the historical run.
     """
-    import glob
+    file_system = FileSystemFactory.create(run_dir)
 
-    files = glob.glob(str(run_dir / "pipeline_attributes_for_*.yaml"))
+    files = file_system.glob("pipeline_attributes_for_*.yaml")
     if not files:
         raise StageLoadError(
             "Historical run file does not exist in: {0}".format(run_dir)
         )
-    file_path = Path(files[0])
+    file_path = FileSystemSetUp.from_str(files[0])
 
     import yaml
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(
+        FileSystemFactory.create(file_path).resolve(type="data"), "r", encoding="utf-8"
+    ) as f:
         data = yaml.safe_load(f)
 
     return PipelineRun._pipeline_run_from_dict(data)
