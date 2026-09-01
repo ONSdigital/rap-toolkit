@@ -326,6 +326,11 @@ class FileSystem(Protocol):
         encoding: str,
     ): ...
 
+    def join_path(
+        self,
+        *paths: str,
+    ) -> str | Path: ...
+
 
 # TODO: do we need a separate protocol to cover local file systems? specific
 # interactions like creating directories, reading/writing files, etc. might
@@ -636,6 +641,25 @@ class LocalFileSystem:
             A file handler for the specified file.
         """
         return logging.FileHandler(str(self.dir_path / file_name), encoding=encoding)
+
+    def join_path(
+        self,
+        *paths: str,
+    ) -> Path:
+        """
+        Join multiple path components into a single path.
+
+        Parameters
+        ----------
+        ``*paths`` : str
+            The path components to join.
+
+        Returns
+        -------
+        ``str``
+            The joined path as a string.
+        """
+        return self.dir_path.joinpath(*paths)
 
 
 # TODO: add a FileSystem for S3 when LFS one is stable
