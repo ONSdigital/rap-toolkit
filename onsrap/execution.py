@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from onsrap.file_system_setup import FileSystemSetUp
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 from onsrap.warnings import StageConfigurationWarning
 
 from .errors import (
@@ -185,35 +185,37 @@ class ExecutionContext:
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
-    # TODO: This needs to shift based on file system
-    def get_data_dir(self) -> Path:
+    def get_data_dir(self) -> str:
         """
         Establishes the filepath that the data is held in.
 
         Returns
         -------
-        Path
+        str
             The file path for the location of the data being used in the pipeline.
         """
         if self.config is not None:
-            return Path(self.config.data_dir)
+            set_up = FileSystemSetUp.from_path(self.config.data_dir, type="dir")
+            uri = set_up.create_uri()
+            return uri
 
         raise PipelineConfigurationError(
             "Please parse a PipelineConfig instance to the ExecutionContext."
         )
 
-    # TODO: This needs to shift based on file system
-    def resolve_output_root(self) -> Path:
+    def resolve_output_root(self) -> str:
         """
         Establishes the filepath that the outputs are going to be saved to.
 
         Returns
         -------
-        Path
+        str
             The file path for the outputs of the run to be saved to.
         """
         if self.run_dir is not None:
-            return Path(self.run_dir)
+            set_up = FileSystemSetUp.from_path(self.run_dir, type="dir")
+            uri = set_up.create_uri()
+            return uri
 
         raise PipelineConfigurationError(
             "Please parse a run directory to the ExecutionContext."
@@ -270,9 +272,9 @@ class ExecutionContext:
         stage_name: str | None,
         path_name: str | None,
         file_name: str | None,
-        root: Path,
+        root: FileSystemSetUp,
         add_folder: list[str] | str | None = None,
-    ) -> Path:
+    ) -> str:
         """
         Returns a file path for a requested item.
 
@@ -297,28 +299,31 @@ class ExecutionContext:
 
         Returns
         -------
-        Path
+        str
             The file path where data has previously been saved to to allow for extraction of
             that data throughout the pipeline.
         """
         result = self.result_for(stage_name) if stage_name is not None else None
+        file_system = FileSystemFactory.create(root)
         if result is not None and path_name is not None:
             selected_path = result.outputs.get(path_name)
-            if selected_path:
-                return Path(selected_path)
+            if isinstance(selected_path, str):
+                return FileSystemSetUp.from_str(selected_path).create_uri()
+            if isinstance(selected_path, Path):
+                return FileSystemSetUp.from_path(selected_path).create_uri()
         if isinstance(add_folder, list):
             if file_name is not None:
-                new_path = root.joinpath(*add_folder, file_name)
+                new_path = str(file_system.join_path(*add_folder, file_name))
                 return new_path
-            new_path = root.joinpath(*add_folder)
+            new_path = str(file_system.join_path(*add_folder))
             return new_path
         if isinstance(add_folder, str):
             if file_name is not None:
-                return root / add_folder / file_name
-            return root / add_folder
+                return str(file_system.join_path(add_folder, file_name))
+            return str(file_system.join_path(add_folder))
         if file_name is not None:
-            return root / file_name
-        return root
+            return str(file_system.join_path(file_name))
+        return str(file_system.join_path())
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
         """
