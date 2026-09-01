@@ -190,7 +190,11 @@ def load_historical_run(run_dir: FileSystemSetUp) -> PipelineRun:
     """
     file_system = FileSystemFactory.create(run_dir)
 
-    files = file_system.glob("pipeline_attributes_for_*.yaml")
+    run_dir_uri = run_dir.create_uri()
+
+    search_path = run_dir_uri.rstrip("/") + "/pipeline_attributes_for_*.yaml"
+
+    files = file_system.glob(search_path)
     if not files:
         raise StageLoadError(
             "Historical run file does not exist in: {0}".format(run_dir)
