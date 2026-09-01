@@ -100,7 +100,9 @@ class Pipeline:
         if self.config.name is None:
             self.config.name = self.name
 
-        self.logger = logger or Logger(log_dir=self.config.log_dir)
+        self.logger = logger or Logger(
+            log_dir=FileSystemSetUp.from_path(self.config.log_dir)
+        )
 
         if stages is not None and configured_stages:
             raise PipelineInitialisationError(

@@ -16,6 +16,10 @@ class FileSystemSetUp:
     """
     A class that holds information relevant to determining the file system being used.
 
+    Defaults to current working directory in Local File Systems using Pathlib. This
+    will not be functional with remote file systems and therefore care must be taken when
+    defaulting FileSystemSetUp.
+
     Parameters
     ----------
     ``prefix`` : str
@@ -36,8 +40,8 @@ class FileSystemSetUp:
         directory access only whereas this is used for a specific file location.
     """
 
-    prefix: str
-    root: str
+    prefix: str = "file://"
+    root: str = str(Path.cwd().resolve())
     workspace_path: Optional[str] = None
     file_name: Optional[str] = None
 
