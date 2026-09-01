@@ -75,9 +75,11 @@ class ExecutionContext:
     run_id: str
     config: PipelineConfig
     logger: Logger
-    run_dir: Path
+    run_dir: FileSystemSetUp
     started_at: datetime = field(default_factory=now)
-    working_directory: Path = field(default_factory=Path.cwd)
+    working_directory: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp()
+    )
     stage_results: dict[str, StageResult] = field(default_factory=dict)
     stage_configs: dict[str, StageConfig] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
@@ -195,8 +197,7 @@ class ExecutionContext:
             The file path for the location of the data being used in the pipeline.
         """
         if self.config is not None:
-            set_up = FileSystemSetUp.from_path(self.config.data_dir, type="dir")
-            uri = set_up.create_uri()
+            uri = self.config.data_dir.create_uri()
             return uri
 
         raise PipelineConfigurationError(
@@ -213,8 +214,7 @@ class ExecutionContext:
             The file path for the outputs of the run to be saved to.
         """
         if self.run_dir is not None:
-            set_up = FileSystemSetUp.from_path(self.run_dir, type="dir")
-            uri = set_up.create_uri()
+            uri = self.run_dir.create_uri()
             return uri
 
         raise PipelineConfigurationError(

@@ -4,7 +4,6 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
@@ -168,14 +167,14 @@ class Logger:
             self._logger.warning(message)
 
     def extract_historical_run_ids(
-        self, run_root: Path, name: str
+        self, run_root: FileSystemSetUp, name: str
     ) -> list[dict[str, Any]]:
         """
         Extracts historical run IDs from the log files.
 
         Parameters
         ----------
-        ``run_root`` : Path
+        ``run_root`` : FileSystemSetUp
             The root directory where the historical runs are stored.
         ``name`` : str
             The name of the pipeline for which to extract historical run IDs.
@@ -253,11 +252,15 @@ class Logger:
                 continue
             timestamp = f"{parts[0]} {parts[1]}"
 
-            run_dir = run_root / run_id
+            run_dir = str(run_root.create_uri() + "/" + run_id)
+            run_dir_setup = FileSystemSetUp.from_str(run_dir)
+            run_dir_fs, run_dir_path = FileSystemFactory.update(
+                run_dir_setup, self.file_system
+            )
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")
-            if run_dir.exists() and log_name == name:
+            if run_dir_fs.exists(type="directory") and log_name == name:
                 matches.append(
                     {
                         "run_id": run_id,

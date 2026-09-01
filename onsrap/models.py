@@ -8,6 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Optional, overload
 
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import PipelineConfigurationError, StageConfigurationError
 
 
@@ -137,11 +139,15 @@ class PipelineConfig:
     name: Optional[str] = None
     stages_to_run: Optional[dict[str, bool]] = None
     backend: str = "python"
-    work_dir: Path = field(default_factory=Path.cwd)
-    project_root: Optional[Path] = None
-    output_dir: Optional[Path] = None
-    log_dir: Path = field(default_factory=lambda: Path("logs"))
-    data_dir: Path = field(default_factory=lambda: Path("data"))
+    work_dir: FileSystemSetUp = field(default_factory=lambda: FileSystemSetUp())
+    project_root: Optional[FileSystemSetUp] = None
+    output_dir: Optional[FileSystemSetUp] = None
+    log_dir: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp(workspace_path="logs")
+    )
+    data_dir: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp(workspace_path="data")
+    )
     allow_subprocess_fallback: bool = True
     python_executable: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -224,8 +230,13 @@ class PipelineConfig:
         if isinstance(value, Mapping):
             return cls.from_mapping(dict(value))
 
-        if isinstance(value, (str, Path)):
-            return cls.from_file(Path(value))
+        if isinstance(value, str):
+            uri = FileSystemSetUp.from_str(value)
+            return cls.from_file(uri)
+
+        if isinstance(value, Path):
+            uri = FileSystemSetUp.from_path(value)
+            return cls.from_file(uri)
 
         raise TypeError("Unsupported pipeline config type: {0!r}".format(type(value)))
 
@@ -256,14 +267,20 @@ class PipelineConfig:
 
         backend = payload.pop("backend", "python")
         stages_to_run = PipelineConfig._extract_stages_run(payload)
-        work_dir = Path(payload.pop("work_dir", Path.cwd()))
+        work_dir = FileSystemSetUp.from_str(payload.pop("work_dir", str(Path.cwd())))
         project_root_value = payload.pop("project_root", None)
         output_dir_value = payload.pop("output_dir", None)
         project_root = (
-            Path(project_root_value) if project_root_value is not None else work_dir
+            FileSystemSetUp.from_str(project_root_value)
+            if project_root_value is not None
+            else work_dir
         )
-        log_dir = Path(payload.pop("log_dir", "logs"))
-        data_dir = Path(payload.pop("data_dir", "data"))
+        log_dir = FileSystemSetUp.from_str(
+            payload.pop("log_dir", FileSystemSetUp(workspace_path="logs"))
+        )
+        data_dir = FileSystemSetUp.from_str(
+            payload.pop("data_dir", FileSystemSetUp(workspace_path="data"))
+        )
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
         overwrite = PipelineConfig._to_bool(payload.pop("overwrite", False))
         if isinstance(raw_subprocess_fallback, str):
@@ -301,7 +318,7 @@ class PipelineConfig:
         )
 
     @classmethod
-    def from_file(cls, path: Path) -> PipelineConfig:
+    def from_file(cls, path: FileSystemSetUp) -> PipelineConfig:
         """
         Extracts a mapping item from a file containing information about how the
         pipeline should run.
@@ -310,7 +327,7 @@ class PipelineConfig:
 
         Parameters
         ----------
-        ``path`` : Path
+        ``path`` : FileSystemSetUp
             The file path containing information to be converted into a PipelineConfig
             instance.
 
@@ -326,15 +343,16 @@ class PipelineConfig:
             If the file containing information about how the Pipeline runs does not
             contain a mapping type.
         """
-        config_path = Path(path).expanduser()
-        if not config_path.exists():
+        file_system = FileSystemFactory.create(path)
+        config_path = file_system.expand_user()
+        if not file_system.exists(type="file"):
             raise FileNotFoundError(
                 "Config file does not exist: {0}".format(config_path)
             )
 
         import yaml
 
-        raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        raw_config = yaml.safe_load(file_system.read_text(encoding="utf-8"))
         if raw_config is None:
             return cls()
 
@@ -353,13 +371,15 @@ class PipelineConfig:
         data = {
             "name": self.name,
             "backend": self.backend,
-            "work_dir": str(self.work_dir),
-            "project_root": str(self.project_root)
+            "work_dir": str(self.work_dir.create_uri()),
+            "project_root": str(self.project_root.create_uri())
             if self.project_root is not None
             else None,
-            "output_dir": str(self.output_dir) if self.output_dir is not None else None,
-            "log_dir": str(self.log_dir),
-            "data_dir": str(self.data_dir),
+            "output_dir": str(self.output_dir.create_uri())
+            if self.output_dir is not None
+            else None,
+            "log_dir": str(self.log_dir.create_uri()),
+            "data_dir": str(self.data_dir.create_uri()),
             "allow_subprocess_fallback": self.allow_subprocess_fallback,
             "python_executable": self.python_executable,
         }

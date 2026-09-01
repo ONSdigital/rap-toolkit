@@ -100,9 +100,7 @@ class Pipeline:
         if self.config.name is None:
             self.config.name = self.name
 
-        self.logger = logger or Logger(
-            log_dir=FileSystemSetUp.from_path(self.config.log_dir)
-        )
+        self.logger = logger or Logger(log_dir=self.config.log_dir)
 
         if stages is not None and configured_stages:
             raise PipelineInitialisationError(
@@ -626,7 +624,10 @@ class Pipeline:
             return None
 
         try:
-            return load_historical_run(run_dir=Path(self.run_output) / latest_run_id)
+            latest_run = FileSystemSetUp.from_str(
+                self.run_output.create_uri() + "/" + str(latest_run_id)
+            )
+            return load_historical_run(run_dir=latest_run)
         except StageLoadError:
             warnings.warn(
                 "Historical run file does not exist. Last_run attribute will be None.",
@@ -676,7 +677,9 @@ class Pipeline:
                 continue
             try:
                 all_runs[run_id] = load_historical_run(
-                    run_dir=Path(self.run_output) / run_id
+                    run_dir=FileSystemSetUp.from_str(
+                        self.run_output.create_uri() + "/" + str(run_id)
+                    )
                 )
             except StageLoadError:
                 warnings.warn(
@@ -685,7 +688,7 @@ class Pipeline:
                 )
         return all_runs if all_runs else None
 
-    def _set_run_output(self) -> Path:
+    def _set_run_output(self) -> FileSystemSetUp:
         """
         Private method that sets the run output directory for the Pipeline.
 
@@ -702,14 +705,14 @@ class Pipeline:
             the directory for the run outputs.
         """
         if self.config.output_dir is not None:
-            run_output = Path(self.config.output_dir)
+            run_output = self.config.output_dir
         else:
             warnings.warn(
                 "Output directory is not specified. Using project root or work directory as the run output.",
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
-            run_output = Path(self.config.project_root or self.config.work_dir)
-        return run_output / "runs"
+            run_output = self.config.project_root or self.config.work_dir
+        return FileSystemSetUp.from_str(run_output.create_uri() + "/runs")
 
     def _coerce_stage(
         self,
@@ -1218,7 +1221,7 @@ class Pipeline:
         stage_definitions: Sequence[Any] | None,
         *,
         backend: str,
-        work_dir: Path,
+        work_dir: FileSystemSetUp,
     ) -> list[Stage]:
         """
         Convert configured stage definitions into ``Stage`` instances.
@@ -1252,7 +1255,7 @@ class Pipeline:
         stage_definition: Any,
         *,
         backend: str,
-        work_dir: Path,
+        work_dir: FileSystemSetUp,
     ) -> Stage | None:
         """
         Resolve one configured stage entry into a ``Stage`` instance.
@@ -1920,7 +1923,7 @@ class Pipeline:
 
     @staticmethod
     def _resolve_stage_source(
-        stage_name: str, location: Any, work_dir: Path
+        stage_name: str, location: Any, work_dir: FileSystemSetUp
     ) -> FileSystemSetUp | Path | str | None:
         """
         Resolve the source path for a configured stage.
@@ -1929,7 +1932,8 @@ class Pipeline:
         paths are first interpreted as given and then relative to ``work_dir``.
         """
         if location in (None, ""):
-            return str(work_dir) + "/scripts/" + f"{stage_name}.py"
+            file_system_work_dir = FileSystemFactory.create(work_dir)
+            return str(file_system_work_dir.dir_path) + "/scripts/" + f"{stage_name}.py"
 
         candidate = str(location)
         candidate_fs_setup = FileSystemSetUp.from_str(candidate)
@@ -1941,7 +1945,7 @@ class Pipeline:
         if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
             return candidate_fs.data_path
 
-        work_dir_candidate = str(work_dir) + "/" + candidate
+        work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
         work_dir_candidate_fs_setup = FileSystemSetUp.from_str(work_dir_candidate)
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
         if work_dir_candidate_fs.exists(type="data"):

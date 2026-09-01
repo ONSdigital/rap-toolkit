@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import StageExecutionError
 from .execution import ExecutionContext
 from .logger import Logger
@@ -91,8 +93,10 @@ class PipelineRunner:
         runtime_id = pipeline._create_runtime_id()
         pipeline.id = runtime_id
 
-        run_dir = pipeline.run_output / runtime_id.get_id()
-        run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir_str = pipeline.run_output.create_uri() + "/" + str(runtime_id.get_id())
+        set_up = FileSystemSetUp.from_str(run_dir_str)
+        file_system = FileSystemFactory.create(set_up)
+        file_system.mkdir(parents=True, exist_ok=True)
 
         # Initialise the ExecutionContext which will be passed to each stage as it runs. This
         # context will hold the configuration for the pipeline and for each stage.
@@ -102,7 +106,7 @@ class PipelineRunner:
             run_id=runtime_id.get_id(),
             config=pipeline.config,
             logger=self.logger,
-            run_dir=run_dir,
+            run_dir=set_up,
             started_at=started_at,
             working_directory=pipeline.config.work_dir,
             stage_configs=dict(pipeline.stage_configs),
@@ -117,7 +121,7 @@ class PipelineRunner:
         manifest.outputs = {}
         pipeline.manifest = manifest
 
-        _log_config(run_dir, context, manifest)
+        _log_config(set_up, context, manifest)
 
         self.logger.event(
             "Pipeline started",
@@ -166,7 +170,7 @@ class PipelineRunner:
 
             # Creates attributes file in the run_directory to log information for later
             # analysis of pipeline runs
-            _log_pipeline_attributes(pipeline_run=run, run_dir=run_dir, context=context)
+            _log_pipeline_attributes(pipeline_run=run, run_dir=set_up, context=context)
 
             self.logger.event(
                 "Pipeline failed",
@@ -191,7 +195,7 @@ class PipelineRunner:
 
         # Creates attributes file in the run_directory to log information for later
         # analysis of pipeline runs
-        _log_pipeline_attributes(pipeline_run=run, run_dir=run_dir, context=context)
+        _log_pipeline_attributes(pipeline_run=run, run_dir=set_up, context=context)
 
         self.logger.event(
             "Pipeline completed",
@@ -247,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _log_pipeline_attributes(
-    pipeline_run: PipelineRun, run_dir: Path, context: ExecutionContext
+    pipeline_run: PipelineRun, run_dir: FileSystemSetUp, context: ExecutionContext
 ) -> None:
     """
     Creates a YAML file within the run directory that contains information
@@ -268,12 +272,15 @@ def _log_pipeline_attributes(
         state information.
     """
     attributes_file = (
-        run_dir
-        / f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
+        str(run_dir.create_uri())
+        + f"/pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
     )
+
+    attributes_setup = FileSystemSetUp.from_str(attributes_file)
+    file_system = FileSystemFactory.create(attributes_setup)
     import yaml
 
-    with open(attributes_file, "w", encoding="utf-8") as f:
+    with file_system.open(mode="w", encoding="utf-8") as f:
         yaml.safe_dump(
             pipeline_run._pipeline_run_to_dict(), f, default_flow_style=False
         )
