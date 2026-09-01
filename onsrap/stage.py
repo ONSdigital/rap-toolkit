@@ -99,7 +99,7 @@ class Stage:
             raise StageConfigurationError("Stage name cannot be empty.")
 
         if isinstance(self.source, str):
-            self.source = FileSystemSetUp.from_str(self.source)
+            self.source = FileSystemSetUp.from_str(self.source, type="file")
             assert isinstance(self.source, FileSystemSetUp)
             source_file_system = FileSystemFactory.create(self.source)
             self.source = source_file_system.expand_user()
@@ -107,7 +107,7 @@ class Stage:
             source_file_system = FileSystemFactory.create(self.source)
             self.source = source_file_system.expand_user()
         elif isinstance(self.source, Path):
-            self.source = FileSystemSetUp.from_path(self.source)
+            self.source = FileSystemSetUp.from_path(self.source, type="file")
             assert isinstance(self.source, FileSystemSetUp)
             source_file_system = FileSystemFactory.create(self.source)
             self.source = source_file_system.expand_user()

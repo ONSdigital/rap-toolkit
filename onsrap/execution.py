@@ -571,9 +571,9 @@ class PythonStageExecutor:
         # TODO: This needs to shift based on file system
         path = stage.source
         if isinstance(path, str):
-            path = FileSystemSetUp.from_str(path)
+            path = FileSystemSetUp.from_str(path, type="file")
         elif isinstance(path, Path):
-            path = FileSystemSetUp.from_path(path)
+            path = FileSystemSetUp.from_path(path, type="file")
 
         assert isinstance(path, FileSystemSetUp)
 

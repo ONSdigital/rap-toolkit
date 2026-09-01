@@ -61,7 +61,7 @@ class FileSystemSetUp:
         return f"{self.prefix}{root}"
 
     @classmethod
-    def from_str(cls, uri: str):
+    def from_str(cls, uri: str, type: str = "file"):
         """
         Derive a FileSystemSetUp object from a URI string.
 
@@ -69,6 +69,8 @@ class FileSystemSetUp:
         ----------
         ``uri`` : str
             The URI string to parse.
+        ``type`` : str, optional
+            The type of the file system, by default "file".
 
         Returns
         -------
@@ -76,13 +78,15 @@ class FileSystemSetUp:
             The derived FileSystemSetUp object.
         """
         normalised_uri = cls._normalisation(uri)
-        prefix, root, workspace_path, file_name = cls._uri_to_parts(normalised_uri)
+        prefix, root, workspace_path, file_name = cls._uri_to_parts(
+            normalised_uri, type
+        )
         return FileSystemSetUp(
             prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
         )
 
     @classmethod
-    def from_path(cls, path: Path):
+    def from_path(cls, path: Path, type: str = "file"):
         """
         Derive a FileSystemSetUp object from a Path object.
 
@@ -90,6 +94,8 @@ class FileSystemSetUp:
         ----------
         ``path`` : Path
             The Path object to parse.
+        ``type`` : str, optional
+            The type of output the path leads to, by default "file".
 
         Returns
         -------
@@ -97,7 +103,9 @@ class FileSystemSetUp:
             The derived FileSystemSetUp object.
         """
         normalised_path = cls._normalisation(path)
-        prefix, root, workspace_path, file_name = cls._uri_to_parts(normalised_path)
+        prefix, root, workspace_path, file_name = cls._uri_to_parts(
+            normalised_path, type
+        )
         return FileSystemSetUp(
             prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
         )
@@ -132,7 +140,7 @@ class FileSystemSetUp:
         parsed = urlparse(text)
         if parsed.scheme:
             if parsed.scheme == "file":
-                return "local str"
+                return "local uri"
             return "remote uri"
 
         try:
@@ -168,6 +176,8 @@ class FileSystemSetUp:
         if not isinstance(input, str):
             raise TypeError("Input must be a string or Path object.")
 
+        input = input.strip()
+
         classification = FileSystemSetUp._classification(input)
 
         if classification == "local str":
@@ -175,13 +185,15 @@ class FileSystemSetUp:
             input = input.resolve()
             assert input.is_absolute(), "Path must be absolute."
             return input.as_uri()
-        elif classification == "remote uri":
-            return input
+
+        elif classification == "local uri" or classification == "remote uri":
+            return input.strip()
+
         else:
             raise ValueError(f"Unknown classification for input: {input}")
 
     @staticmethod
-    def _uri_to_parts(uri: str) -> tuple[str, str, str | None, str | None]:
+    def _uri_to_parts(uri: str, type: str) -> tuple[str, str, str | None, str | None]:
         """
         Convert a URI into:
         (prefix, root, workspace_path, file_name)
@@ -215,7 +227,7 @@ class FileSystemSetUp:
         if parsed.scheme == "file":
             # Windows file URI: file:///C:/...
             if path_parts and path_parts[0].endswith(":"):
-                root = path_parts[0]  # C:
+                root = path_parts[0] + "/"  # C:/
                 tail = path_parts[1:]
             # UNC form: file://server/share/...
             elif parsed.netloc:
@@ -234,7 +246,7 @@ class FileSystemSetUp:
             root = parsed.netloc
             tail = path_parts
 
-        file_name = tail[-1] if tail and "." in tail[-1] else None
+        file_name = None if type == "dir" else (tail[-1] if tail else None)
         workspace_path = "/".join(tail[:-1] if file_name else tail) or None
         return prefix, root, workspace_path, file_name
 
@@ -673,23 +685,27 @@ class FileSystemFactory:
         return fs_class(setup)
 
     @classmethod
-    def update(cls, path: str, fs: FileSystem) -> tuple[FileSystem, FileSystemSetUp]:
+    def update(
+        cls, path: str, fs: FileSystem, type: str = "file"
+    ) -> tuple[FileSystem, FileSystemSetUp]:
         """
         Update the file system instance with a new setup.
 
         Parameters
         ----------
-        ``setup`` : FileSystemSetUp
-            The new setup information.
+        ``path`` : str
+            The path to the new setup information.
         ``fs`` : FileSystem
             The existing file system instance to update.
+        ``type`` : str, optional
+            The type of the file system, by default "file".
 
         Returns
         -------
         ``FileSystem``
             An updated instance of the appropriate file system class.
         """
-        setup = FileSystemSetUp.from_str(path)
+        setup = FileSystemSetUp.from_str(path, type)
         fs = cls.create(setup)
         return fs, setup
 

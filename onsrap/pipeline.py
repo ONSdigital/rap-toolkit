@@ -745,10 +745,10 @@ class Pipeline:
             return Stage.from_callable(stage)
 
         if isinstance(stage, Path):
-            return Stage.from_file(FileSystemSetUp.from_path(stage))
+            return Stage.from_file(FileSystemSetUp.from_path(stage, type="file"))
 
         if isinstance(stage, str):
-            return Stage.from_file(FileSystemSetUp.from_str(stage))
+            return Stage.from_file(FileSystemSetUp.from_str(stage, type="file"))
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -1305,7 +1305,7 @@ class Pipeline:
             stage_name=str(stage_name), location=location, work_dir=work_dir
         )
         if isinstance(source, Path):
-            source = FileSystemSetUp.from_path(source)
+            source = FileSystemSetUp.from_path(source, type="file")
 
         if isinstance(source, str):
             source = FileSystemSetUp.from_str(source)
@@ -1519,7 +1519,7 @@ class Pipeline:
             stage_dependencies = cls._dependencies_for_stage(
                 stage_name, path, dependencies
             )
-            path = FileSystemSetUp.from_path(path)
+            path = FileSystemSetUp.from_path(path, type="file")
             stages.append(
                 Stage.from_file(
                     path,
