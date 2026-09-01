@@ -365,7 +365,7 @@ class Stage:
         ``StageConfigurationError``
             If ``source`` attribute does not define a source or does not exist.
         """
-        if not (isinstance(self.source, Path) or callable(self.source)):
+        if not (isinstance(self.source, FileSystemSetUp) or callable(self.source)):
             raise StageConfigurationError(
                 f"Stage '{self.name}' must have a Path or Callable source."
             )
@@ -375,20 +375,25 @@ class Stage:
                 f"Stage '{self.name}' does not define a source. Source provided: {self.source}"
             )
 
-        if isinstance(self.source, Path) and not self.source.is_file():
-            raise StageConfigurationError(f"Stage source does not exist: {self.source}")
+        if isinstance(self.source, FileSystemSetUp):
+            fs = FileSystemFactory.create(self.source)
+            if not fs.is_file():
+                raise StageConfigurationError(
+                    f"Stage source does not exist: {self.source}"
+                )
 
     @property
-    def source_path(self) -> Optional[Path]:
+    def source_path(self) -> Optional[str]:
         """
-        Sets a property for the ``Stage`` class if the ``source`` is a path.
+        Sets a property for the ``Stage`` class if the ``source`` is a FileSystemSetUp.
 
         Returns
         -------
-        ``source_path`` attribute to the ``Stage`` class if the ``source`` is a path.
+        ``str``
+            Version of the ``source`` attribute as a string if it is a FileSystemSetUp. Otherwise, returns None.
         """
-        if isinstance(self.source, Path):
-            return self.source
+        if isinstance(self.source, FileSystemSetUp):
+            return self.source.create_uri()
         return None
 
     @property
@@ -403,8 +408,8 @@ class Stage:
         if callable(self.source):
             return f"{getattr(self.source, '__module__', '<callable>')}.{getattr(self.source, '__name__', self.name)}"
 
-        if isinstance(self.source, Path):
-            return str(self.source)
+        if isinstance(self.source, FileSystemSetUp):
+            return self.source.create_uri()
 
         return None
 
