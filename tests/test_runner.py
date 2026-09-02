@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from onsrap.execution import ExecutionContext
+from onsrap.file_system_setup import FileSystemSetUp
 from onsrap.logger import Logger
 from onsrap.models import (
     PipelineConfig,
@@ -277,7 +278,9 @@ class TestRunInfoWriteOut:
         )
 
         _log_pipeline_attributes(
-            pipeline_run=pipeline_run, run_dir=run_dir, context=context
+            pipeline_run=pipeline_run,
+            run_dir=FileSystemSetUp.confirm_typing(run_dir, path_type="dir"),
+            context=context,
         )
 
         expected_file = run_dir / (
@@ -344,7 +347,9 @@ class TestRunInfoWriteOut:
         )
 
         _log_pipeline_attributes(
-            pipeline_run=pipeline_run, run_dir=run_dir, context=context
+            pipeline_run=pipeline_run,
+            run_dir=FileSystemSetUp.confirm_typing(run_dir, path_type="dir"),
+            context=context,
         )
 
         expected_file = run_dir / (
