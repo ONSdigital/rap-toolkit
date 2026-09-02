@@ -335,6 +335,10 @@ class FileSystem(Protocol):
         *paths: str,
     ) -> str | Path: ...
 
+    def suffix(
+        self,
+    ) -> str: ...
+
 
 # TODO: do we need a separate protocol to cover local file systems? specific
 # interactions like creating directories, reading/writing files, etc. might
@@ -664,6 +668,17 @@ class LocalFileSystem:
             The joined path as a string.
         """
         return self.dir_path.joinpath(*paths)
+
+    def suffix(self) -> str:
+        """
+        Get the suffix of the data file.
+
+        Returns
+        -------
+        ``str``
+            The suffix of the data file, or an empty string if the data path is not set.
+        """
+        return self.data_path.suffix if self.data_path else ""
 
 
 # TODO: add a FileSystem for S3 when LFS one is stable
