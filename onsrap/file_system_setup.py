@@ -344,6 +344,12 @@ class FileSystem(Protocol):
         type: str,  # dir or data
     ) -> str: ...
 
+    def write_text(
+        self,
+        content: str,
+        encoding: str = "utf-8",
+    ) -> None: ...
+
 
 # TODO: do we need a separate protocol to cover local file systems? specific
 # interactions like creating directories, reading/writing files, etc. might
@@ -702,6 +708,25 @@ class LocalFileSystem:
             return self.data_path.stem if self.data_path else ""
         else:
             raise ValueError("Invalid type. Expected 'dir' or 'data'.")
+
+    def write_text(
+        self,
+        content: str,
+        encoding: str = "utf-8",
+    ) -> None:
+        """
+        Write text content to the data file.
+
+        Parameters
+        ----------
+        ``content`` : str
+            The text content to write to the data file.
+        ``encoding`` : str, optional
+            The encoding to use for writing the text, by default "utf-8".
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot write text.")
+        self.data_path.write_text(content, encoding=encoding)
 
 
 # TODO: add a FileSystem for S3 when LFS one is stable
