@@ -30,12 +30,10 @@ def config() -> PipelineConfig:
     """
     Return a PipelineConfig object for testing.
     """
-    work_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir")
-    project_root = FileSystemSetUp(root="project_root")
-    log_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir/log")
-    data_dir = FileSystemSetUp(
-        root="project_root", workspace_path="work_dir/config_data"
-    )
+    work_dir = FileSystemSetUp.from_str("work_dir")
+    project_root = FileSystemSetUp.from_str("project_root")
+    log_dir = FileSystemSetUp.from_str("work_dir/log")
+    data_dir = FileSystemSetUp.from_str("work_dir/config_data")
     return PipelineConfig(
         "test_pipeline",
         {"stage_test": True},
@@ -79,8 +77,8 @@ def execution(config, logger, stageresult, stage_config) -> ExecutionContext:
     ``stage_config`` : StageConfig
         A ``StageConfig`` object for testing.
     """
-    run_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir/runs")
-    work_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir")
+    run_dir = FileSystemSetUp.from_str("work_dir/runs")
+    work_dir = FileSystemSetUp.from_str("work_dir")
 
     return ExecutionContext(
         "test_pipeline",
@@ -154,13 +152,9 @@ class TestExecutionContext:
         assert execution.run_id == "run_id_1234"
         assert execution.config == config
         assert execution.logger == logger
-        assert execution.run_dir == FileSystemSetUp(
-            root="project_root", workspace_path="work_dir/runs"
-        )
+        assert execution.run_dir == FileSystemSetUp.from_str("work_dir/runs")
         assert execution.started_at == "2024-05-06 15:45:30"
-        assert execution.working_directory == FileSystemSetUp(
-            root="project_root", workspace_path="work_dir"
-        )
+        assert execution.working_directory == FileSystemSetUp.from_str("work_dir")
         assert execution.stage_results == {"stage_test": stageresult}
         assert execution.variables == {}
 
@@ -240,8 +234,8 @@ class TestExecutionContext:
         ``stageresult`` : StageResult
             A ``StageResult`` object for testing.
         """
-        run_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir/runs")
-        work_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir")
+        run_dir = FileSystemSetUp.from_str("work_dir/runs")
+        work_dir = FileSystemSetUp.from_str("work_dir")
         return ExecutionContext(
             "test_pipeline",
             "run_id_1234",
@@ -273,7 +267,10 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the config attribute of the ExecutionContext instance is None.
         """
-        assert execution.get_data_dir() == "file:///project_root/work_dir/config_data"
+        assert (
+            execution.get_data_dir()
+            == FileSystemSetUp.from_str("work_dir/config_data").create_uri()
+        )
 
         with pytest.raises(PipelineConfigurationError):
             blank_context_with_config_none.get_data_dir()
@@ -294,8 +291,11 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the run_dir attribute of the ExecutionContext instance is None.
         """
-        work_dir = FileSystemSetUp(root="project_root", workspace_path="work_dir")
-        assert execution.resolve_output_root() == "file:///project_root/work_dir/runs"
+        work_dir = FileSystemSetUp.from_str("work_dir")
+        assert (
+            execution.resolve_output_root()
+            == FileSystemSetUp.from_str("work_dir/runs").create_uri()
+        )
 
         execution_blank_config = ExecutionContext(
             "test_pipeline",
@@ -339,7 +339,7 @@ class TestExecutionContext:
             "run_id_1234",
             config,
             logger,
-            FileSystemSetUp(root="project_root", workspace_path="work_dir/runs"),
+            FileSystemSetUp.from_str("work_dir/runs"),
             stage_configs={"stage_test": stage_config},
             active_stage_name="stage_test",
         )
