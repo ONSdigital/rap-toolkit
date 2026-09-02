@@ -345,7 +345,7 @@ class PipelineConfig:
         """
         file_system = FileSystemFactory.create(path)
         config_path = file_system.expand_user()
-        if not file_system.exists(type="file"):
+        if not file_system.exists(type="data"):
             raise FileNotFoundError(
                 "Config file does not exist: {0}".format(config_path)
             )

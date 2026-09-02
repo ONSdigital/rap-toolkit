@@ -339,6 +339,11 @@ class FileSystem(Protocol):
         self,
     ) -> str: ...
 
+    def stem(
+        self,
+        type: str,  # dir or data
+    ) -> str: ...
+
 
 # TODO: do we need a separate protocol to cover local file systems? specific
 # interactions like creating directories, reading/writing files, etc. might
@@ -679,6 +684,24 @@ class LocalFileSystem:
             The suffix of the data file, or an empty string if the data path is not set.
         """
         return self.data_path.suffix if self.data_path else ""
+
+    def stem(self, type: str) -> str:
+        """
+        Returns the stem of the path, which is the final component of the path without
+        its suffix.
+
+        Returns
+        -------
+        ``str``
+            The stem of the path corresponding to the specified type ('dir' or 'data'),
+            or an empty string if the path is not set.
+        """
+        if type == "dir":
+            return self.dir_path.stem if self.dir_path else ""
+        elif type == "data":
+            return self.data_path.stem if self.data_path else ""
+        else:
+            raise ValueError("Invalid type. Expected 'dir' or 'data'.")
 
 
 # TODO: add a FileSystem for S3 when LFS one is stable

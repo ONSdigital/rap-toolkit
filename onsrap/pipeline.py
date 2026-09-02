@@ -1519,12 +1519,19 @@ class Pipeline:
         """
         stages: list[Stage] = []
         for file_path in file_paths:
-            path = Path(file_path)
-            stage_name = path.stem
+            if isinstance(file_path, str):
+                path = FileSystemSetUp.from_str(file_path)
+            elif isinstance(file_path, Path):
+                path = FileSystemSetUp.from_path(file_path, type="file")
+            else:
+                raise PipelineConfigurationError(
+                    f"File should be a string or a Path object. Yours is {type(file_path)}"
+                )
+            fs = FileSystemFactory.create(path)
+            stage_name = fs.stem(type="data")
             stage_dependencies = cls._dependencies_for_stage(
                 stage_name, path, dependencies
             )
-            path = FileSystemSetUp.from_path(path, type="file")
             stages.append(
                 Stage.from_file(
                     path,
@@ -1648,7 +1655,7 @@ class Pipeline:
         config_fs_setup = FileSystemSetUp.from_str(str(config))
         config_file_system = FileSystemFactory.create(config_fs_setup)
         config_path = config_file_system.expand_user()
-        if Path(config_fs_setup.file_name).suffix.lower() not in ACCEPTED_CONFIG_TYPES:
+        if config_file_system.suffix().lower() not in ACCEPTED_CONFIG_TYPES:
             raise StageConfigurationError(
                 f"Unsupported config file format parsed as Stage Configuration: {config!r}."
             )
@@ -1981,6 +1988,15 @@ class Pipeline:
         candidates: tuple[str, ...]
         if isinstance(path, Path):
             candidates = (stage_name, path.name, path.stem, str(path), path.as_posix())
+        elif isinstance(path, FileSystemSetUp):
+            if path.file_name:
+                candidates = (stage_name, str(path), path.create_uri(), path.file_name)
+            else:
+                candidates = (
+                    stage_name,
+                    str(path),
+                    path.create_uri(),
+                )
         elif callable(path):
             candidates = (stage_name, str(getattr(path, "__name__", stage_name)))
         else:
