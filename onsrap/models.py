@@ -1036,7 +1036,9 @@ class PipelineRun:
         )
 
     @classmethod
-    def load_pipeline_run_for_historical_run(cls, file_path: Path) -> PipelineRun:
+    def load_pipeline_run_for_historical_run(
+        cls, file_path: FileSystemSetUp
+    ) -> PipelineRun:
         """
         Load a previously executed pipeline run from a YAML file.
 
@@ -1046,7 +1048,7 @@ class PipelineRun:
 
         Parameters
         ----------
-        ``file_path`` : Path
+        ``file_path`` : FileSystemSetUp
             The path to the YAML file containing the saved pipeline run.
 
         Returns
@@ -1061,10 +1063,14 @@ class PipelineRun:
         """
         import yaml
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"Pipeline run file does not exist: {file_path}")
+        fs = FileSystemFactory.create(file_path)
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        if not fs.exists(type="file"):
+            raise FileNotFoundError(
+                f"Pipeline run file does not exist: {file_path.create_uri()}"
+            )
+
+        with fs.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return cls._pipeline_run_from_dict(data)
