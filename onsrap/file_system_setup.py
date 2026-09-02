@@ -40,7 +40,7 @@ class FileSystemSetUp:
         directory access only whereas this is used for a specific file location.
     """
 
-    prefix: str = "file://"
+    prefix: str = "file:///"
     root: str = str(Path.cwd().resolve())
     workspace_path: Optional[str] = None
     file_name: Optional[str] = None
@@ -222,7 +222,7 @@ class FileSystemSetUp:
         if not parsed.scheme:
             raise ValueError(f"Expected URI with scheme, got: {uri!r}")
 
-        prefix = f"{parsed.scheme}://"
+        prefix = f"{parsed.scheme}:///"
 
         # Decode escaped characters and split path robustly
         raw_path = unquote(parsed.path or "")
@@ -718,7 +718,7 @@ class FileSystemFactory:
         Parameters
         ----------
         ``prefix`` : str
-            The prefix associated with the file system (e.g., 's3a://', 'file://').
+            The prefix associated with the file system (e.g., 's3a://', 'file:///').
         ``fs_class`` : Type[FileSystem]
             The class implementing the FileSystem protocol.
         """
@@ -778,4 +778,4 @@ class FileSystemFactory:
 
 
 # Registering the file system classes with their respective prefixes
-FileSystemFactory.register("file://", LocalFileSystem)
+FileSystemFactory.register("file:///", LocalFileSystem)

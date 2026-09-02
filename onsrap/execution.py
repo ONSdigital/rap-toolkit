@@ -314,16 +314,22 @@ class ExecutionContext:
         if isinstance(add_folder, list):
             if file_name is not None:
                 new_path = str(file_system.join_path(*add_folder, file_name))
-                return new_path
+                return FileSystemSetUp.from_str(new_path).create_uri()
             new_path = str(file_system.join_path(*add_folder))
-            return new_path
+            return FileSystemSetUp.from_str(new_path).create_uri()
         if isinstance(add_folder, str):
             if file_name is not None:
-                return str(file_system.join_path(add_folder, file_name))
-            return str(file_system.join_path(add_folder))
+                return FileSystemSetUp.from_str(
+                    str(file_system.join_path(add_folder, file_name))
+                ).create_uri()
+            return FileSystemSetUp.from_str(
+                str(file_system.join_path(add_folder))
+            ).create_uri()
         if file_name is not None:
-            return str(file_system.join_path(file_name))
-        return str(file_system.join_path())
+            return FileSystemSetUp.from_str(
+                str(file_system.join_path(file_name))
+            ).create_uri()
+        return FileSystemSetUp.from_str(str(file_system.join_path())).create_uri()
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
         """
