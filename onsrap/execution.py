@@ -659,7 +659,7 @@ class PythonStageExecutor:
             If the ``Stage`` script was unable to be run successfully.
         """
         path = stage.source
-        assert isinstance(path, Path)
+        assert isinstance(path, FileSystemSetUp)
 
         started_at = now()
         context.logger.event(
@@ -669,9 +669,13 @@ class PythonStageExecutor:
             source=str(path),
         )
 
-        command = [str(path)]
-        if path.suffix.lower() == ".py":
-            command = [context.config.python_executable or sys.executable, str(path)]
+        command = [str(path.create_uri())]
+        stage_fs = FileSystemFactory.create(path)
+        if stage_fs.suffix().lower() == ".py":
+            command = [
+                context.config.python_executable or sys.executable,
+                str(path.create_uri()),
+            ]
 
         completed = subprocess.run(
             command,
