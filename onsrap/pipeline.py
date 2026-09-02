@@ -100,7 +100,9 @@ class Pipeline:
         if self.config.name is None:
             self.config.name = self.name
 
-        self.logger = logger or Logger(log_dir=self.config.log_dir)
+        self.logger = logger or Logger(
+            log_dir=FileSystemSetUp.confirm_typing(self.config.log_dir, path_type="dir")
+        )
 
         if stages is not None and configured_stages:
             raise PipelineInitialisationError(
@@ -624,9 +626,10 @@ class Pipeline:
             return None
 
         try:
-            latest_run = FileSystemSetUp.from_any(
-                self.run_output.create_uri() + "/" + str(latest_run_id)
-            )
+            if isinstance(self.run_output, FileSystemSetUp):
+                latest_run = self.run_output.create_uri() + "/" + str(latest_run_id)
+            else:
+                latest_run = str(self.run_output) + "/" + str(latest_run_id)
             return load_historical_run(run_dir=latest_run)
         except StageLoadError:
             warnings.warn(
@@ -677,9 +680,11 @@ class Pipeline:
                 continue
             try:
                 all_runs[run_id] = load_historical_run(
-                    run_dir=FileSystemSetUp.from_any(
-                        self.run_output.create_uri() + "/" + str(run_id)
-                    )
+                    run_dir=FileSystemSetUp.confirm_typing(
+                        self.run_output, path_type="dir"
+                    ).create_uri()
+                    + "/"
+                    + str(run_id)
                 )
             except StageLoadError:
                 warnings.warn(
@@ -712,7 +717,7 @@ class Pipeline:
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
             run_output = self.config.project_root or self.config.work_dir
-        return FileSystemSetUp.from_any(run_output.create_uri() + "/runs")
+        return FileSystemSetUp.from_any(run_output).create_uri() + "/runs"
 
     def _coerce_stage(
         self,
@@ -1945,9 +1950,7 @@ class Pipeline:
         candidate_fs_setup = FileSystemSetUp.from_any(location, path_type="file")
         candidate_fs = FileSystemFactory.create(candidate_fs_setup)
         candidate = candidate_fs.expand_user()
-        candidate_fs, candidate_fs_setup = FileSystemFactory.update(
-            candidate, candidate_fs
-        )
+        candidate_fs = FileSystemFactory.update(candidate, candidate_fs)
         if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
             return candidate_fs.data_path
 

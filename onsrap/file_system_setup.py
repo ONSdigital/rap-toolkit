@@ -821,8 +821,8 @@ class FileSystemFactory:
 
     @classmethod
     def update(
-        cls, path: str, fs: FileSystem, type: str = "file"
-    ) -> tuple[FileSystem, FileSystemSetUp]:
+        cls, path: str | Path | FileSystemSetUp, fs: FileSystem, path_type: str = "file"
+    ) -> FileSystem:
         """
         Update the file system instance with a new setup.
 
@@ -832,7 +832,7 @@ class FileSystemFactory:
             The path to the new setup information.
         ``fs`` : FileSystem
             The existing file system instance to update.
-        ``type`` : str, optional
+        ``path_type`` : str, optional
             The type of the file system, by default "file".
 
         Returns
@@ -840,9 +840,9 @@ class FileSystemFactory:
         ``FileSystem``
             An updated instance of the appropriate file system class.
         """
-        setup = FileSystemSetUp.from_str(path, type)
+        setup = FileSystemSetUp.confirm_typing(path, path_type=path_type)
         fs = cls.create(setup)
-        return fs, setup
+        return fs
 
 
 # Registering the file system classes with their respective prefixes

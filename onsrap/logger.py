@@ -185,6 +185,9 @@ class Logger:
             A list of dictionaries containing run_id, timestamp, and run_dir for each historical run.
         """
 
+        # confirms that run_root is a FileSystemSetUp instance and if not, creates it
+        run_root = FileSystemSetUp.confirm_typing(run_root, path_type="dir")
+
         # ensure that logger is writing to a file and extract filepath
         if not self._logger.hasHandlers():
             raise HistoricalPipelineLoadError(
@@ -207,9 +210,9 @@ class Logger:
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
         logfile_path = FileSystemSetUp.from_any(str(logfile_path), path_type="file")
 
-        new_fs, new_path = FileSystemFactory.update(logfile_path, self.file_system)
+        new_fs = FileSystemFactory.update(logfile_path, self.file_system)
 
-        if not new_fs.exists(type="file"):
+        if not new_fs.exists(type="data"):
             raise HistoricalPipelineLoadError(
                 "The log file does not exist at this location."
             )
@@ -253,14 +256,12 @@ class Logger:
             timestamp = f"{parts[0]} {parts[1]}"
 
             run_dir = str(run_root.create_uri() + "/" + run_id)
-            run_dir_setup = FileSystemSetUp.from_any(run_dir)
-            run_dir_fs, run_dir_path = FileSystemFactory.update(
-                run_dir_setup, self.file_system
-            )
+            run_dir_setup = FileSystemSetUp.from_any(run_dir, path_type="dir")
+            run_dir_fs = FileSystemFactory.update(run_dir_setup, self.file_system)
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")
-            if run_dir_fs.exists(type="directory") and log_name == name:
+            if run_dir_fs.exists(type="dir") and log_name == name:
                 matches.append(
                     {
                         "run_id": run_id,

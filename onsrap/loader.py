@@ -179,7 +179,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     return module
 
 
-def load_historical_run(run_dir: FileSystemSetUp) -> PipelineRun:
+def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
     """
     Load a previously executed pipeline run from a YAML file.
 
@@ -188,24 +188,28 @@ def load_historical_run(run_dir: FileSystemSetUp) -> PipelineRun:
     ``PipelineRun``
         An instance of ``PipelineRun`` representing the historical run.
     """
-    file_system = FileSystemFactory.create(run_dir)
+    run_dir_setup = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+    file_system = FileSystemFactory.create(run_dir_setup)
 
-    run_dir_uri = run_dir.create_uri()
-
-    search_path = run_dir_uri.rstrip("/") + "/pipeline_attributes_for_*.yaml"
+    search_path = "pipeline_attributes_for_*.yaml"
 
     files = file_system.glob(search_path)
     if not files:
         raise StageLoadError(
             "Historical run file does not exist in: {0}".format(run_dir)
         )
+    # updates file path with searched full data file
     file_path = FileSystemSetUp.from_any(files[0])
+    # creates FileSystem from FileSystemSetUp
+    update_fs = FileSystemFactory.update(file_path, file_system)
+    # resolves file path to ensure full path is available
+    updated_file_path = update_fs.resolve(type="data")
+    # updates file system instance with full file path to ensure file can be opened
+    update_fs = FileSystemFactory.update(updated_file_path, file_system)
 
     import yaml
 
-    with open(
-        FileSystemFactory.create(file_path).resolve(type="data"), "r", encoding="utf-8"
-    ) as f:
+    with update_fs.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return PipelineRun._pipeline_run_from_dict(data)
