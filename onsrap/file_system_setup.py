@@ -820,7 +820,7 @@ class FileSystemFactory:
         return fs_class(setup)
 
     @classmethod
-    def update(
+    def update_fs(
         cls, path: str | Path | FileSystemSetUp, fs: FileSystem, path_type: str = "file"
     ) -> FileSystem:
         """

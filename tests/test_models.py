@@ -4,6 +4,7 @@ from textwrap import dedent
 
 import pytest
 
+from onsrap.file_system_setup import FileSystemSetUp
 from onsrap.models import (
     PipelineConfig,
     PipelineRun,
@@ -98,10 +99,10 @@ def expected_pipeline_config() -> PipelineConfig:
     return PipelineConfig(
         name="test_rap",
         backend="python",
-        work_dir=Path("tmp/work"),
-        project_root=Path("project"),
-        log_dir=Path("tmp/logs"),
-        data_dir=Path("tmp/data"),
+        work_dir=FileSystemSetUp.confirm_typing(Path("tmp/work"), path_type="dir"),
+        project_root=FileSystemSetUp.confirm_typing(Path("project"), path_type="dir"),
+        log_dir=FileSystemSetUp.confirm_typing(Path("tmp/logs"), path_type="dir"),
+        data_dir=FileSystemSetUp.confirm_typing(Path("tmp/data"), path_type="dir"),
         allow_subprocess_fallback=True,
         python_executable=None,
         metadata={"variables": ["name", "age"], "num_stages": 6},
@@ -194,11 +195,14 @@ class TestPipelineConfig:
             encoding="utf-8",
         )
 
-        fake_file = "path_not_real"
+        fake_file = FileSystemSetUp.from_str("path_not_real")
+        no_map_pipeline_config_fssetup = FileSystemSetUp.from_path(
+            no_map_pipeline_config
+        )
         with pytest.raises(FileNotFoundError):
             PipelineConfig.from_file(fake_file)
         with pytest.raises(TypeError):
-            PipelineConfig.from_file(no_map_pipeline_config)
+            PipelineConfig.from_file(no_map_pipeline_config_fssetup)
 
     def test_from_file_success(
         self, tmp_path, expected_pipeline_config
@@ -236,7 +240,11 @@ class TestPipelineConfig:
             + "\n",
             encoding="utf-8",
         )
-        configuration = PipelineConfig.from_file(pipeline_config)
+
+        pipeline_config_fssetup = FileSystemSetUp.confirm_typing(
+            pipeline_config, path_type="file"
+        )
+        configuration = PipelineConfig.from_file(pipeline_config_fssetup)
         assert configuration == expected_pipeline_config
 
     def test_to_dict(self, pipelineconfig) -> None:
@@ -253,11 +261,19 @@ class TestPipelineConfig:
         assert pipelineconfig.to_dict() == {
             "name": "test_rap",
             "backend": "python",
-            "work_dir": str(Path("tmp/work")),
-            "project_root": "project",
+            "work_dir": FileSystemSetUp.confirm_typing(
+                Path("tmp/work"), path_type="dir"
+            ).create_uri(),
+            "project_root": FileSystemSetUp.confirm_typing(
+                Path("project"), path_type="dir"
+            ).create_uri(),
             "output_dir": None,
-            "log_dir": str(Path("tmp/logs")),
-            "data_dir": str(Path("tmp/data")),
+            "log_dir": FileSystemSetUp.confirm_typing(
+                Path("tmp/logs"), path_type="dir"
+            ).create_uri(),
+            "data_dir": FileSystemSetUp.confirm_typing(
+                Path("tmp/data"), path_type="dir"
+            ).create_uri(),
             "allow_subprocess_fallback": True,
             "python_executable": None,
             "variables": ["name", "age"],

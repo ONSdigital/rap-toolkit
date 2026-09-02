@@ -210,7 +210,7 @@ class Logger:
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
         logfile_path = FileSystemSetUp.from_any(str(logfile_path), path_type="file")
 
-        new_fs = FileSystemFactory.update(logfile_path, self.file_system)
+        new_fs = FileSystemFactory.update_fs(logfile_path, self.file_system)
 
         if not new_fs.exists(type="data"):
             raise HistoricalPipelineLoadError(
@@ -257,7 +257,7 @@ class Logger:
 
             run_dir = str(run_root.create_uri() + "/" + run_id)
             run_dir_setup = FileSystemSetUp.from_any(run_dir, path_type="dir")
-            run_dir_fs = FileSystemFactory.update(run_dir_setup, self.file_system)
+            run_dir_fs = FileSystemFactory.update_fs(run_dir_setup, self.file_system)
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")

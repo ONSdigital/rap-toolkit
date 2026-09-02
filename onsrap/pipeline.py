@@ -1953,7 +1953,7 @@ class Pipeline:
         candidate_fs_setup = FileSystemSetUp.from_any(location, path_type="file")
         candidate_fs = FileSystemFactory.create(candidate_fs_setup)
         candidate = candidate_fs.expand_user()
-        candidate_fs = FileSystemFactory.update(candidate, candidate_fs)
+        candidate_fs = FileSystemFactory.update_fs(candidate, candidate_fs)
         if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
             return candidate_fs.data_path
 

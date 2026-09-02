@@ -201,11 +201,11 @@ def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
     # updates file path with searched full data file
     file_path = FileSystemSetUp.from_any(files[0])
     # creates FileSystem from FileSystemSetUp
-    update_fs = FileSystemFactory.update(file_path, file_system)
+    update_fs = FileSystemFactory.update_fs(file_path, file_system)
     # resolves file path to ensure full path is available
     updated_file_path = update_fs.resolve(type="data")
     # updates file system instance with full file path to ensure file can be opened
-    update_fs = FileSystemFactory.update(updated_file_path, file_system)
+    update_fs = FileSystemFactory.update_fs(updated_file_path, file_system)
 
     import yaml
 
