@@ -626,10 +626,13 @@ class Pipeline:
             return None
 
         try:
-            if isinstance(self.run_output, FileSystemSetUp):
-                latest_run = self.run_output.create_uri() + "/" + str(latest_run_id)
-            else:
-                latest_run = str(self.run_output) + "/" + str(latest_run_id)
+            latest_run = (
+                FileSystemSetUp.confirm_typing(
+                    self.run_output, path_type="dir"
+                ).create_uri()
+                + "/"
+                + str(latest_run_id)
+            )
             return load_historical_run(run_dir=latest_run)
         except StageLoadError:
             warnings.warn(

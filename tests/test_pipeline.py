@@ -11,6 +11,7 @@ from onsrap.errors import (
     StageLoadError,
 )
 from onsrap.execution import PythonStageExecutor
+from onsrap.file_system_setup import FileSystemSetUp
 from onsrap.models import PipelineRun, StageConfig
 from onsrap.pipeline import Pipeline, PipelineConfig
 from onsrap.stage import Stage
@@ -888,7 +889,9 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
 
         assert result is expected_run
 
-        expected_path = pipeline_no_history.run_output / run_id
+        expected_path = FileSystemSetUp.confirm_typing(
+            pipeline_no_history.run_output / run_id, path_type="dir"
+        ).create_uri()
         mock_load_historical_run.assert_called_once_with(run_dir=expected_path)
 
     def test_which_run_is_selected_load_latest_run(
@@ -933,12 +936,14 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
 
         pipeline_no_history._load_latest_run()
 
-        expected_path = pipeline_no_history.run_output / run_id_1
+        expected_path = FileSystemSetUp.confirm_typing(
+            pipeline_no_history.run_output / run_id_1, path_type="dir"
+        ).create_uri()
         mock_load_historical_run.assert_called_once_with(run_dir=expected_path)
 
         # does not refer to run_dir in the extract_historical_run_ids list but the
         # parameter required in load_historical_run.
-        assert mock_load_historical_run.call_args.kwargs["run_dir"].name == run_id_1
+        assert mock_load_historical_run.call_args.kwargs["run_dir"].endswith(run_id_1)
 
     def test_no_errors_raised_success_load_latest_run(
         self, monkeypatch, pipeline_no_history: Pipeline
@@ -1305,7 +1310,9 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert len(result) == 1
         assert "run_A" in result
         mock_loader.assert_called_once_with(
-            run_dir=pipeline_no_history.run_output / "run_A"
+            run_dir=FileSystemSetUp.confirm_typing(
+                pipeline_no_history.run_output / "run_A", path_type="dir"
+            ).create_uri()
         )
 
     def test_multiple_entries_dict_multiple_runs(
@@ -1357,8 +1364,16 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert isinstance(result, dict)
         assert len(result) == 2
         assert "run_A" in result and "run_B" in result
-        mock_loader.assert_any_call(run_dir=pipeline_no_history.run_output / "run_A")
-        mock_loader.assert_any_call(run_dir=pipeline_no_history.run_output / "run_B")
+        mock_loader.assert_any_call(
+            run_dir=FileSystemSetUp.confirm_typing(
+                pipeline_no_history.run_output / "run_A", path_type="dir"
+            ).create_uri()
+        )
+        mock_loader.assert_any_call(
+            run_dir=FileSystemSetUp.confirm_typing(
+                pipeline_no_history.run_output / "run_B", path_type="dir"
+            ).create_uri()
+        )
 
     def test_warning_if_no_run_id(
         self, monkeypatch, pipeline_no_history: Pipeline
@@ -1407,7 +1422,9 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert len(result) == 1
         assert "run_A" not in result and "run_B" in result
         mock_loader.assert_called_once_with(
-            run_dir=pipeline_no_history.run_output / "run_B"
+            run_dir=FileSystemSetUp.confirm_typing(
+                pipeline_no_history.run_output / "run_B", path_type="dir"
+            ).create_uri()
         )
 
     def test_None_with_stageloaderror(
