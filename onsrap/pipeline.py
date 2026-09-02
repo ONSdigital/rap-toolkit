@@ -624,7 +624,7 @@ class Pipeline:
             return None
 
         try:
-            latest_run = FileSystemSetUp.from_str(
+            latest_run = FileSystemSetUp.from_any(
                 self.run_output.create_uri() + "/" + str(latest_run_id)
             )
             return load_historical_run(run_dir=latest_run)
@@ -677,7 +677,7 @@ class Pipeline:
                 continue
             try:
                 all_runs[run_id] = load_historical_run(
-                    run_dir=FileSystemSetUp.from_str(
+                    run_dir=FileSystemSetUp.from_any(
                         self.run_output.create_uri() + "/" + str(run_id)
                     )
                 )
@@ -712,7 +712,7 @@ class Pipeline:
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
             run_output = self.config.project_root or self.config.work_dir
-        return FileSystemSetUp.from_str(run_output.create_uri() + "/runs")
+        return FileSystemSetUp.from_any(run_output.create_uri() + "/runs")
 
     def _coerce_stage(
         self,
@@ -750,10 +750,10 @@ class Pipeline:
             return Stage.from_callable(stage)
 
         if isinstance(stage, Path):
-            return Stage.from_file(FileSystemSetUp.from_path(stage, path_type="file"))
+            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
 
         if isinstance(stage, str):
-            return Stage.from_file(FileSystemSetUp.from_str(stage, path_type="file"))
+            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -1155,11 +1155,11 @@ class Pipeline:
                     continue
 
                 output_path = str(output_dir)
-                output_path_fs_setup = FileSystemSetUp.from_str(output_path)
+                output_path_fs_setup = FileSystemSetUp.from_any(output_path)
                 output_path_file_system = FileSystemFactory.create(output_path_fs_setup)
                 if not output_path_file_system.is_absolute("dir"):
                     output_path = str(self.config.work_dir) + "/" + output_path
-                    output_path_fs_setup = FileSystemSetUp.from_str(output_path)
+                    output_path_fs_setup = FileSystemSetUp.from_any(output_path)
                     output_path_file_system = FileSystemFactory.create(
                         output_path_fs_setup
                     )
@@ -1652,7 +1652,7 @@ class Pipeline:
         if isinstance(config, Mapping):
             return dict(config)
 
-        config_fs_setup = FileSystemSetUp.from_str(str(config))
+        config_fs_setup = FileSystemSetUp.from_any(config)
         config_file_system = FileSystemFactory.create(config_fs_setup)
         config_path = config_file_system.expand_user()
         if config_file_system.suffix().lower() not in ACCEPTED_CONFIG_TYPES:
@@ -1942,8 +1942,7 @@ class Pipeline:
             file_system_work_dir = FileSystemFactory.create(work_dir)
             return str(file_system_work_dir.dir_path) + "/scripts/" + f"{stage_name}.py"
 
-        candidate = str(location)
-        candidate_fs_setup = FileSystemSetUp.from_str(candidate)
+        candidate_fs_setup = FileSystemSetUp.from_any(location, path_type="file")
         candidate_fs = FileSystemFactory.create(candidate_fs_setup)
         candidate = candidate_fs.expand_user()
         candidate_fs, candidate_fs_setup = FileSystemFactory.update(
@@ -1953,7 +1952,9 @@ class Pipeline:
             return candidate_fs.data_path
 
         work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
-        work_dir_candidate_fs_setup = FileSystemSetUp.from_str(work_dir_candidate)
+        work_dir_candidate_fs_setup = FileSystemSetUp.confirm_typing(
+            work_dir_candidate, path_type="file"
+        )
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
         if work_dir_candidate_fs.exists(type="data"):
             return work_dir_candidate

@@ -230,12 +230,8 @@ class PipelineConfig:
         if isinstance(value, Mapping):
             return cls.from_mapping(dict(value))
 
-        if isinstance(value, str):
-            uri = FileSystemSetUp.from_str(value)
-            return cls.from_file(uri)
-
-        if isinstance(value, Path):
-            uri = FileSystemSetUp.from_path(value)
+        if isinstance(value, (str, Path)):
+            uri = FileSystemSetUp.from_any(value)
             return cls.from_file(uri)
 
         raise TypeError("Unsupported pipeline config type: {0!r}".format(type(value)))
@@ -267,20 +263,20 @@ class PipelineConfig:
 
         backend = payload.pop("backend", "python")
         stages_to_run = PipelineConfig._extract_stages_run(payload)
-        work_dir = FileSystemSetUp.from_str(payload.pop("work_dir", str(Path.cwd())))
-        project_root_value = payload.pop("project_root", None)
+        work_dir = FileSystemSetUp.confirm_typing(
+            payload.pop("work_dir", str(Path.cwd())), path_type="dir"
+        )
+        project_root = FileSystemSetUp.confirm_typing(
+            payload.pop("project_root", None), path_type="dir"
+        )
         output_dir_value = payload.pop("output_dir", None)
-        project_root = (
-            FileSystemSetUp.from_str(project_root_value)
-            if project_root_value is not None
-            else work_dir
+        log_dir = FileSystemSetUp.confirm_typing(
+            payload.pop("log_dir", "logs"), path_type="dir"
         )
-        log_dir = FileSystemSetUp.from_str(
-            payload.pop("log_dir", FileSystemSetUp(workspace_path="logs"))
+        data_dir = FileSystemSetUp.confirm_typing(
+            payload.pop("data_dir", "data"), path_type="dir"
         )
-        data_dir = FileSystemSetUp.from_str(
-            payload.pop("data_dir", FileSystemSetUp(workspace_path="data"))
-        )
+
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
         overwrite = PipelineConfig._to_bool(payload.pop("overwrite", False))
         if isinstance(raw_subprocess_fallback, str):

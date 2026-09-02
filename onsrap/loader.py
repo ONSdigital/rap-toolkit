@@ -129,8 +129,8 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
 
     Parameters
     ----------
-    ``path`` : str
-        The path for the stage.
+    ``path`` : FileSystemSetUp
+        The file system setup for the stage.
 
     Returns
     -------
@@ -199,7 +199,7 @@ def load_historical_run(run_dir: FileSystemSetUp) -> PipelineRun:
         raise StageLoadError(
             "Historical run file does not exist in: {0}".format(run_dir)
         )
-    file_path = FileSystemSetUp.from_str(files[0])
+    file_path = FileSystemSetUp.from_any(files[0])
 
     import yaml
 

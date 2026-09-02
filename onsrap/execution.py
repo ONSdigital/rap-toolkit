@@ -307,29 +307,27 @@ class ExecutionContext:
         file_system = FileSystemFactory.create(root)
         if result is not None and path_name is not None:
             selected_path = result.outputs.get(path_name)
-            if isinstance(selected_path, str):
-                return FileSystemSetUp.from_str(selected_path).create_uri()
-            if isinstance(selected_path, Path):
-                return FileSystemSetUp.from_path(selected_path).create_uri()
+            if isinstance(selected_path, (str, Path)):
+                return FileSystemSetUp.from_any(selected_path).create_uri()
         if isinstance(add_folder, list):
             if file_name is not None:
                 new_path = str(file_system.join_path(*add_folder, file_name))
-                return FileSystemSetUp.from_str(new_path).create_uri()
+                return FileSystemSetUp.from_any(new_path).create_uri()
             new_path = str(file_system.join_path(*add_folder))
-            return FileSystemSetUp.from_str(new_path).create_uri()
+            return FileSystemSetUp.from_any(new_path).create_uri()
         if isinstance(add_folder, str):
             if file_name is not None:
-                return FileSystemSetUp.from_str(
+                return FileSystemSetUp.from_any(
                     str(file_system.join_path(add_folder, file_name))
                 ).create_uri()
-            return FileSystemSetUp.from_str(
+            return FileSystemSetUp.from_any(
                 str(file_system.join_path(add_folder))
             ).create_uri()
         if file_name is not None:
-            return FileSystemSetUp.from_str(
+            return FileSystemSetUp.from_any(
                 str(file_system.join_path(file_name))
             ).create_uri()
-        return FileSystemSetUp.from_str(str(file_system.join_path())).create_uri()
+        return FileSystemSetUp.from_any(str(file_system.join_path())).create_uri()
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
         """
@@ -581,10 +579,7 @@ class PythonStageExecutor:
 
         # TODO: This needs to shift based on file system
         path = stage.source
-        if isinstance(path, str):
-            path = FileSystemSetUp.from_str(path, path_type="file")
-        elif isinstance(path, Path):
-            path = FileSystemSetUp.from_path(path, path_type="file")
+        path = FileSystemSetUp.confirm_typing(path, path_type="file")
 
         assert isinstance(path, FileSystemSetUp)
 

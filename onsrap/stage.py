@@ -98,23 +98,12 @@ class Stage:
         if not self.name:
             raise StageConfigurationError("Stage name cannot be empty.")
 
-        if isinstance(self.source, str):
-            self.source = FileSystemSetUp.from_str(self.source, path_type="file")
-            assert isinstance(self.source, FileSystemSetUp)
-            source_file_system = FileSystemFactory.create(self.source)
-            self.source = source_file_system.expand_user()
-        elif isinstance(self.source, FileSystemSetUp):
-            source_file_system = FileSystemFactory.create(self.source)
-            self.source = source_file_system.expand_user()
-        elif isinstance(self.source, Path):
-            self.source = FileSystemSetUp.from_path(self.source, path_type="file")
-            assert isinstance(self.source, FileSystemSetUp)
-            source_file_system = FileSystemFactory.create(self.source)
-            self.source = source_file_system.expand_user()
-        elif self.source is not None and not callable(self.source):
-            raise StageConfigurationError(
-                "Stage source must be a FileSystemSetUp, Path, string, callable, or None."
-            )
+        if self.source is not None and not callable(self.source):
+            self.source = FileSystemSetUp.confirm_typing(self.source, path_type="file")
+            if not isinstance(self.source, (FileSystemSetUp, Path, str)):
+                raise StageConfigurationError(
+                    "Stage source must be a FileSystemSetUp, Path, string, callable, or None."
+                )
 
         self.dependencies = _normalize_dependencies(self.dependencies)
         self.metadata = dict(self.metadata or {})

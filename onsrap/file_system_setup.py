@@ -131,20 +131,17 @@ class FileSystemSetUp:
         ``FileSystemSetUp``
             The derived FileSystemSetUp object.
         """
-        if isinstance(path, Path):
-            return cls.from_path(path, path_type)
+        if isinstance(path, FileSystemSetUp):
+            return path
         elif isinstance(path, str):
             return cls.from_str(path, path_type)
+        elif isinstance(path, Path):
+            return cls.from_path(path, path_type)
+        elif path is None:
+            raise ValueError("Input path cannot be None.")
         else:
-            try:
-                path_str = str(path)
-                return cls.from_str(path_str, path_type)
-            except Exception:
-                pass
-
-            dtype_path = type(path)
             raise TypeError(
-                f"Your input is not a str/Path and cannot be converted to one. Please check your input type: {dtype_path}."
+                f"Your input is not a str/Path and cannot be converted to one. Please check your input type: {type(path)}."
             )
 
     @staticmethod
@@ -212,7 +209,9 @@ class FileSystemSetUp:
             return input.as_uri()
 
         if not isinstance(input, str):
-            raise TypeError("Input must be a string or Path object.")
+            raise TypeError(
+                f"Input must be a string or Path object. {input} is of type {type(input)}."
+            )
 
         input = input.strip()
 
@@ -287,6 +286,17 @@ class FileSystemSetUp:
         file_name = None if type == "dir" else (tail[-1] if tail else None)
         workspace_path = "/".join(tail[:-1] if file_name else tail) or None
         return prefix, root, workspace_path, file_name
+
+    @classmethod
+    def confirm_typing(cls, input: Any, path_type: str):
+        if isinstance(input, FileSystemSetUp):
+            return input
+        elif isinstance(input, (str, Path)):
+            return cls.from_any(input, path_type=path_type)
+        else:
+            raise TypeError(
+                f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
+            )
 
 
 class FileSystem(Protocol):

@@ -94,7 +94,7 @@ class PipelineRunner:
         pipeline.id = runtime_id
 
         run_dir_str = pipeline.run_output.create_uri() + "/" + str(runtime_id.get_id())
-        set_up = FileSystemSetUp.from_str(run_dir_str)
+        set_up = FileSystemSetUp.from_any(run_dir_str)
         file_system = FileSystemFactory.create(set_up)
         file_system.mkdir(parents=True, exist_ok=True)
 
@@ -276,7 +276,7 @@ def _log_pipeline_attributes(
         + f"/pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
     )
 
-    attributes_setup = FileSystemSetUp.from_str(attributes_file)
+    attributes_setup = FileSystemSetUp.from_any(attributes_file)
     file_system = FileSystemFactory.create(attributes_setup)
     import yaml
 

@@ -205,7 +205,7 @@ class Logger:
             )
 
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
-        logfile_path = FileSystemSetUp.from_str(str(logfile_path), path_type="file")
+        logfile_path = FileSystemSetUp.from_any(str(logfile_path), path_type="file")
 
         new_fs, new_path = FileSystemFactory.update(logfile_path, self.file_system)
 
@@ -253,7 +253,7 @@ class Logger:
             timestamp = f"{parts[0]} {parts[1]}"
 
             run_dir = str(run_root.create_uri() + "/" + run_id)
-            run_dir_setup = FileSystemSetUp.from_str(run_dir)
+            run_dir_setup = FileSystemSetUp.from_any(run_dir)
             run_dir_fs, run_dir_path = FileSystemFactory.update(
                 run_dir_setup, self.file_system
             )
