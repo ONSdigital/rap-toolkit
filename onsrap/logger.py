@@ -205,7 +205,7 @@ class Logger:
             )
 
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
-        logfile_path = FileSystemSetUp.from_str(str(logfile_path), type="file")
+        logfile_path = FileSystemSetUp.from_str(str(logfile_path), path_type="file")
 
         new_fs, new_path = FileSystemFactory.update(logfile_path, self.file_system)
 

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from pathlib import Path, PurePosixPath
-from typing import IO, Optional, Protocol, Type
+from typing import IO, Any, Optional, Protocol, Type
 from urllib.parse import unquote, urlparse, urlsplit
 
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
@@ -65,7 +65,7 @@ class FileSystemSetUp:
         return f"{self.prefix}{root}"
 
     @classmethod
-    def from_str(cls, uri: str, type: str = "file"):
+    def from_str(cls, uri: str, path_type: str = "file"):
         """
         Derive a FileSystemSetUp object from a URI string.
 
@@ -73,7 +73,7 @@ class FileSystemSetUp:
         ----------
         ``uri`` : str
             The URI string to parse.
-        ``type`` : str, optional
+        ``path_type`` : str, optional
             The type of the file system, by default "file".
 
         Returns
@@ -83,14 +83,14 @@ class FileSystemSetUp:
         """
         normalised_uri = cls._normalisation(uri)
         prefix, root, workspace_path, file_name = cls._uri_to_parts(
-            normalised_uri, type
+            normalised_uri, path_type
         )
         return FileSystemSetUp(
             prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
         )
 
     @classmethod
-    def from_path(cls, path: Path, type: str = "file"):
+    def from_path(cls, path: Path, path_type: str = "file"):
         """
         Derive a FileSystemSetUp object from a Path object.
 
@@ -98,7 +98,7 @@ class FileSystemSetUp:
         ----------
         ``path`` : Path
             The Path object to parse.
-        ``type`` : str, optional
+        ``path_type`` : str, optional
             The type of output the path leads to, by default "file".
 
         Returns
@@ -108,11 +108,44 @@ class FileSystemSetUp:
         """
         normalised_path = cls._normalisation(path)
         prefix, root, workspace_path, file_name = cls._uri_to_parts(
-            normalised_path, type
+            normalised_path, path_type
         )
         return FileSystemSetUp(
             prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
         )
+
+    @classmethod
+    def from_any(cls, path: Any, path_type: str = "file"):
+        """
+        Derive a FileSystemSetUp object from either a URI string or a Path object.
+
+        Parameters
+        ----------
+        ``path`` : Any
+            The input path to parse, which can be either a URI string or a Path object.
+        ``path_type`` : str, optional
+            The type of output the path leads to, by default "file".
+
+        Returns
+        -------
+        ``FileSystemSetUp``
+            The derived FileSystemSetUp object.
+        """
+        if isinstance(path, Path):
+            return cls.from_path(path, path_type)
+        elif isinstance(path, str):
+            return cls.from_str(path, path_type)
+        else:
+            try:
+                path_str = str(path)
+                return cls.from_str(path_str, path_type)
+            except Exception:
+                pass
+
+            dtype_path = type(path)
+            raise TypeError(
+                f"Your input is not a str/Path and cannot be converted to one. Please check your input type: {dtype_path}."
+            )
 
     @staticmethod
     def _classification(input: str) -> str:
