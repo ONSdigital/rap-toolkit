@@ -298,6 +298,30 @@ class FileSystemSetUp:
                 f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
             )
 
+    def create_path(self) -> Path:
+        """
+        Create a Path object from the FileSystemSetUp instance.
+
+        Returns
+        -------
+        ``Path``
+            The constructed Path object.
+        """
+        if self.prefix == "file:///":
+            if self.workspace_path:
+                if self.file_name:
+                    return Path(self.root) / self.workspace_path / self.file_name
+                return Path(self.root) / self.workspace_path
+            if self.file_name:
+                return Path(self.root) / self.file_name
+            return Path(self.root)
+        else:
+            raise TypeError(
+                f"Your FileSystemSetUp is not for a Local File System. "
+                f"It contains the prefix {self.prefix}. This method is only "
+                f"for Local File Systems."
+            )
+
 
 class FileSystem(Protocol):
     """
@@ -393,6 +417,11 @@ class FileSystem(Protocol):
         encoding: str = "utf-8",
     ) -> None: ...
 
+    def parent(
+        self,
+        path_type: str,  # dir or data
+    ) -> Path: ...
+
 
 # TODO: do we need a separate protocol to cover local file systems? specific
 # interactions like creating directories, reading/writing files, etc. might
@@ -418,6 +447,7 @@ class LocalFileSystem:
         ``setup`` : FileSystemSetUp
             The setup information containing the prefix, root, and workspace path.
         """
+        self.setup = setup
         root = Path(setup.root)
         self.dir_path: Path = (
             root / setup.workspace_path if setup.workspace_path else root
@@ -770,6 +800,32 @@ class LocalFileSystem:
         if not self.data_path:
             raise ValueError("Data path is not set. Cannot write text.")
         self.data_path.write_text(content, encoding=encoding)
+
+    def parent(
+        self,
+        path_type: str,  # dir or data
+    ) -> Path:
+        """
+        Returns the parent directory of the data file or directory.
+
+        Returns
+        -------
+        ``Path``
+            The parent directory as a Path object.
+        """
+        if path_type == "data":
+            if self.data_path:
+                return self.data_path.parent
+            else:
+                raise ValueError("Data path is not set. Cannot get parent directory.")
+        if path_type == "dir":
+            if self.dir_path:
+                return self.dir_path.parent
+            else:
+                raise ValueError(
+                    "Directory path is not set. Cannot get parent directory."
+                )
+        raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
 
 
 # TODO: add a FileSystem for S3 when LFS one is stable
