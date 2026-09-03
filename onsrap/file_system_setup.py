@@ -894,6 +894,151 @@ class S3FileSystem:
         """
         return f"S3FileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
 
+    def exists(
+        self,
+        type: str,  # dir or data
+    ) -> bool:
+        """
+        Check if the path exists in the S3 file system.
+
+        This method should be implemented to check the existence of the directory or
+        data file in the S3 bucket.
+
+        Returns
+        -------
+        ``bool``
+            True if the path exists, False otherwise.
+
+        Raises
+        ------
+        NotImplementedError
+            If the method is not implemented.
+        """
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def is_file(
+        self,
+    ) -> bool:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def is_absolute(
+        self,
+        type: str,  # dir or data
+    ) -> bool:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def mkdir(
+        self,
+        parents: bool = True,
+        exist_ok: bool = True,
+    ) -> None:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def read_text(
+        self,
+        encoding: Optional[str] = "utf-8",
+    ) -> str:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def open(
+        self,
+        mode: str = "r",
+        encoding: Optional[str] = "utf-8",
+    ) -> IO:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def glob(
+        self,
+        specific_pattern: str,
+    ) -> list[str]:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def expand_user(
+        self,
+    ) -> str:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def resolve(
+        self,
+        type: str,  # dir or data
+    ) -> str | Path:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def spec_from_file_location(
+        self,
+        module_name: str,
+    ):
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def file_handler(
+        self,
+        file_name: str,
+        encoding: str,
+    ):
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def join_path(
+        self,
+        *paths: str,
+    ) -> str | Path:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def suffix(
+        self,
+    ) -> str:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def stem(
+        self,
+        type: str,  # dir or data
+    ) -> str:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def write_text(
+        self,
+        content: str,
+        encoding: str = "utf-8",
+    ) -> None:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
+    def parent(
+        self,
+        path_type: str,  # dir or data
+    ) -> Path:
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
+
 
 class FileSystemFactory:
     _registry: dict[str, Type[FileSystem]] = {}
