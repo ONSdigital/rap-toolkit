@@ -287,6 +287,11 @@ class TestExecutionContext:
             ).create_path()
         )
 
+        assert (
+            execution.get_data_dir(path_type="path")
+            == FileSystemSetUp.from_str("work_dir/config_data").create_path()
+        )
+
         with pytest.raises(PipelineConfigurationError):
             blank_context_with_config_none.get_data_dir(path_type="uri")
 
@@ -317,6 +322,11 @@ class TestExecutionContext:
         assert (
             execution.resolve_output_root(path_type="path")
             == FileSystemSetUp.from_path(tmp_path / "work_dir/runs").create_path()
+        )
+
+        assert (
+            execution.resolve_output_root(path_type="path")
+            == FileSystemSetUp.from_str("work_dir/runs").create_path()
         )
 
         execution_blank_config = ExecutionContext(
