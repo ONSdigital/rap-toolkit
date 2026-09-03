@@ -268,12 +268,17 @@ class TestExecutionContext:
             If the config attribute of the ExecutionContext instance is None.
         """
         assert (
-            execution.get_data_dir()
+            execution.get_data_dir(path_type="uri")
             == FileSystemSetUp.from_str("work_dir/config_data").create_uri()
         )
 
+        assert (
+            execution.get_data_dir(path_type="path")
+            == FileSystemSetUp.from_str("work_dir/config_data").create_path()
+        )
+
         with pytest.raises(PipelineConfigurationError):
-            blank_context_with_config_none.get_data_dir()
+            blank_context_with_config_none.get_data_dir(path_type="uri")
 
     def test_resolve_output_root(self, execution) -> None:
         """
@@ -293,8 +298,13 @@ class TestExecutionContext:
         """
         work_dir = FileSystemSetUp.from_str("work_dir")
         assert (
-            execution.resolve_output_root()
+            execution.resolve_output_root(path_type="uri")
             == FileSystemSetUp.from_str("work_dir/runs").create_uri()
+        )
+
+        assert (
+            execution.resolve_output_root(path_type="path")
+            == FileSystemSetUp.from_str("work_dir/runs").create_path()
         )
 
         execution_blank_config = ExecutionContext(
@@ -310,7 +320,7 @@ class TestExecutionContext:
         )
 
         with pytest.raises(PipelineConfigurationError):
-            execution_blank_config.resolve_output_root()
+            execution_blank_config.resolve_output_root(path_type="uri")
 
     def test_stage_config_accessors_return_named_and_active_configs(
         self, config, logger
@@ -496,7 +506,9 @@ class TestResolveGivenPath:
             expected_path = base_dir.resolve().as_uri()
 
         assert (
-            execution.resolve_given_path(None, path_name, file_name, root, add_folder)
+            execution.resolve_given_path(
+                None, path_name, file_name, root, "uri", add_folder
+            )
             == expected_path
         )
 
@@ -526,9 +538,18 @@ class TestResolveGivenPath:
 
         expected_value = FileSystemSetUp.from_str("clean.py").create_uri()
 
+        expected_value_path = FileSystemSetUp.from_str("clean.py").create_path()
+
         assert (
-            execution.resolve_given_path(stage_name, path_name, None, root, None)
+            execution.resolve_given_path(stage_name, path_name, None, root, "uri", None)
             == expected_value
+        )
+
+        assert (
+            execution.resolve_given_path(
+                stage_name, path_name, None, root, "path", None
+            )
+            == expected_value_path
         )
 
 

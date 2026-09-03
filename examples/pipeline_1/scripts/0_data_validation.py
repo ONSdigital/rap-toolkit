@@ -87,8 +87,8 @@ def write_report(report_path: Path, report: dict[str, object]) -> None:
 
 
 def main(context: ExecutionContext = None) -> dict[str, object]:
-    data_root = context.get_data_dir()
-    output_root = context.resolve_output_root()
+    data_root = context.get_data_dir(path_type="path")
+    output_root = context.resolve_output_root(path_type="path")
     raw_path = data_root / "orders.csv"
     report_path = output_root / "interim" / "0_validation_report.json"
 

@@ -187,7 +187,7 @@ class ExecutionContext:
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
-    def get_data_dir(self) -> str:
+    def get_data_dir(self, path_type: str) -> str | Path | None:
         """
         Establishes the filepath that the data is held in.
 
@@ -197,14 +197,18 @@ class ExecutionContext:
             The file path for the location of the data being used in the pipeline.
         """
         if self.config is not None:
-            uri = self.config.data_dir.create_uri()
-            return uri
+            if path_type == "uri":
+                uri = self.config.data_dir.create_uri()
+                return uri
+            if path_type == "path":
+                path = self.config.data_dir.create_path()
+                return path
 
         raise PipelineConfigurationError(
             "Please parse a PipelineConfig instance to the ExecutionContext."
         )
 
-    def resolve_output_root(self) -> str:
+    def resolve_output_root(self, path_type: str) -> str | Path | None:
         """
         Establishes the filepath that the outputs are going to be saved to.
 
@@ -214,8 +218,12 @@ class ExecutionContext:
             The file path for the outputs of the run to be saved to.
         """
         if self.run_dir is not None:
-            uri = self.run_dir.create_uri()
-            return uri
+            if path_type == "uri":
+                uri = self.run_dir.create_uri()
+                return uri
+            if path_type == "path":
+                path = self.run_dir.create_path()
+                return path
 
         raise PipelineConfigurationError(
             "Please parse a run directory to the ExecutionContext."
@@ -273,6 +281,7 @@ class ExecutionContext:
         path_name: str | None,
         file_name: str | None,
         root: FileSystemSetUp,
+        path_type: str,
         add_folder: list[str] | str | None = None,
     ) -> str:
         """
@@ -291,9 +300,11 @@ class ExecutionContext:
             key/value pair within the output of the previous stage.
         ``file_name`` : str
             The name of the file that you are trying to access the Path for.
-        ``root`` : Path
-            The file path for the root of the directory. This should be denoted through
+        ``root`` : FileSystemSetUp
+            The file system setup for the root of the directory. This should be denoted through
             other methods.
+        ``path_type`` : str = "Path"
+            The type of path to return. Can be either ``uri`` or ``path``. Defaults to Path.
         ``add_folder`` : list[str] | str | None, default = None
             Additional folder name/s to add into the returned file path.
 
@@ -304,30 +315,68 @@ class ExecutionContext:
             that data throughout the pipeline.
         """
         result = self.result_for(stage_name) if stage_name is not None else None
-        file_system = FileSystemFactory.create(root)
+        if not isinstance(root, FileSystemSetUp):
+            new_root = FileSystemSetUp.confirm_typing(root, path_type="dir")
+        else:
+            new_root = root
+        file_system = FileSystemFactory.create(new_root)
         if result is not None and path_name is not None:
             selected_path = result.outputs.get(path_name)
             if isinstance(selected_path, (str, Path)):
-                return FileSystemSetUp.from_any(selected_path).create_uri()
+                return (
+                    FileSystemSetUp.from_any(selected_path).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(selected_path).create_path()
+                )
         if isinstance(add_folder, list):
             if file_name is not None:
                 new_path = str(file_system.join_path(*add_folder, file_name))
-                return FileSystemSetUp.from_any(new_path).create_uri()
+                return (
+                    FileSystemSetUp.from_any(new_path).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(new_path).create_path()
+                )
             new_path = str(file_system.join_path(*add_folder))
-            return FileSystemSetUp.from_any(new_path).create_uri()
+            return (
+                FileSystemSetUp.from_any(new_path).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(new_path).create_path()
+            )
         if isinstance(add_folder, str):
             if file_name is not None:
-                return FileSystemSetUp.from_any(
-                    str(file_system.join_path(add_folder, file_name))
+                return (
+                    FileSystemSetUp.from_any(
+                        str(file_system.join_path(add_folder, file_name))
+                    ).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(
+                        str(file_system.join_path(add_folder, file_name))
+                    ).create_path()
+                )
+            return (
+                FileSystemSetUp.from_any(
+                    str(file_system.join_path(add_folder))
                 ).create_uri()
-            return FileSystemSetUp.from_any(
-                str(file_system.join_path(add_folder))
-            ).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(
+                    str(file_system.join_path(add_folder))
+                ).create_path()
+            )
         if file_name is not None:
-            return FileSystemSetUp.from_any(
-                str(file_system.join_path(file_name))
-            ).create_uri()
-        return FileSystemSetUp.from_any(str(file_system.join_path())).create_uri()
+            return (
+                FileSystemSetUp.from_any(
+                    str(file_system.join_path(file_name))
+                ).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(
+                    str(file_system.join_path(file_name))
+                ).create_path()
+            )
+        return (
+            FileSystemSetUp.from_any(str(file_system.join_path())).create_uri()
+            if path_type == "uri"
+            else FileSystemSetUp.from_any(str(file_system.join_path())).create_path()
+        )
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
         """
