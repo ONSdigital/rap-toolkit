@@ -329,6 +329,11 @@ class FileSystemSetUp:
             else:
                 source_path = Path(self.root)
 
+            # TODO: Does this need to be here? Idea was that this would cover cases
+            # where the path is not valid and therefore will only output valid paths
+            # however it limits where someone might use create_path to create the path
+            # before building the directory/file itself. I think this is okay but might
+            # be worth reviewing.
             if source_path.exists():
                 return source_path
             else:

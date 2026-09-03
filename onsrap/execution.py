@@ -205,7 +205,7 @@ class ExecutionContext:
                 if path is None:
                     raise PipelineConfigurationError(
                         f"Your run_dir {self.run_dir} cannot be converted into a Path "
-                        f"object. Please check your file system type."
+                        f"object. It returns {path}. Please check your file system type."
                     )
                 return path
 
@@ -231,7 +231,7 @@ class ExecutionContext:
                 if path is None:
                     raise PipelineConfigurationError(
                         f"Your run_dir {self.run_dir} cannot be converted into a Path "
-                        f"object. Please check your file system type."
+                        f"object. It returns {path} Please check your file system type."
                     )
                 return path
 

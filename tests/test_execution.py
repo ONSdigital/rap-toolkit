@@ -26,14 +26,14 @@ def logger() -> Logger:
 
 
 @pytest.fixture
-def config() -> PipelineConfig:
+def config(tmp_path) -> PipelineConfig:
     """
     Return a PipelineConfig object for testing.
     """
-    work_dir = FileSystemSetUp.from_str("work_dir")
-    project_root = FileSystemSetUp.from_str("project_root")
-    log_dir = FileSystemSetUp.from_str("work_dir/log")
-    data_dir = FileSystemSetUp.from_str("work_dir/config_data")
+    work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
+    project_root = FileSystemSetUp.from_path(tmp_path / "project_root")
+    log_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/log")
+    data_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/config_data")
     return PipelineConfig(
         "test_pipeline",
         {"stage_test": True},
@@ -62,7 +62,7 @@ def stage_config() -> StageConfig:
 
 
 @pytest.fixture
-def execution(config, logger, stageresult, stage_config) -> ExecutionContext:
+def execution(config, logger, stageresult, stage_config, tmp_path) -> ExecutionContext:
     """
     Create an ExecutionContext object for testing.
 
@@ -77,8 +77,8 @@ def execution(config, logger, stageresult, stage_config) -> ExecutionContext:
     ``stage_config`` : StageConfig
         A ``StageConfig`` object for testing.
     """
-    run_dir = FileSystemSetUp.from_str("work_dir/runs")
-    work_dir = FileSystemSetUp.from_str("work_dir")
+    run_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/runs")
+    work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
 
     return ExecutionContext(
         "test_pipeline",
@@ -132,7 +132,7 @@ def expected_recorded_stage_result() -> StageResult:
 
 class TestExecutionContext:
     def test_executioncontext_creation(
-        self, execution, logger, config, stageresult
+        self, execution, logger, config, stageresult, tmp_path
     ) -> None:
         """
         Test that the ExecutionContext creates the right attributes.
@@ -152,9 +152,13 @@ class TestExecutionContext:
         assert execution.run_id == "run_id_1234"
         assert execution.config == config
         assert execution.logger == logger
-        assert execution.run_dir == FileSystemSetUp.from_str("work_dir/runs")
+        assert execution.run_dir == FileSystemSetUp.from_path(
+            tmp_path / "work_dir/runs"
+        )
         assert execution.started_at == "2024-05-06 15:45:30"
-        assert execution.working_directory == FileSystemSetUp.from_str("work_dir")
+        assert execution.working_directory == FileSystemSetUp.from_path(
+            tmp_path / "work_dir"
+        )
         assert execution.stage_results == {"stage_test": stageresult}
         assert execution.variables == {}
 
@@ -224,7 +228,7 @@ class TestExecutionContext:
         assert execution.stage_outputs == {"stage_test": "example output"}
 
     @pytest.fixture
-    def blank_context_with_config_none(self, stageresult) -> ExecutionContext:
+    def blank_context_with_config_none(self, stageresult, tmp_path) -> ExecutionContext:
         """
         Fixture that returns a test ExecutionContext instance with a None config for
         testing error handling.
@@ -234,8 +238,8 @@ class TestExecutionContext:
         ``stageresult`` : StageResult
             A ``StageResult`` object for testing.
         """
-        run_dir = FileSystemSetUp.from_str("work_dir/runs")
-        work_dir = FileSystemSetUp.from_str("work_dir")
+        run_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/runs")
+        work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
         return ExecutionContext(
             "test_pipeline",
             "run_id_1234",
@@ -248,7 +252,9 @@ class TestExecutionContext:
             {},
         )
 
-    def test_get_data_dir(self, execution, blank_context_with_config_none) -> None:
+    def test_get_data_dir(
+        self, execution, blank_context_with_config_none, tmp_path
+    ) -> None:
         """
         Tests that get_data_dir method extracts the path from the execution context
         or, if the context is None, returns an error to indicate that additional input
@@ -267,20 +273,24 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the config attribute of the ExecutionContext instance is None.
         """
+        path = Path(tmp_path / "work_dir/config_data")
+        path.mkdir(parents=True, exist_ok=True)
         assert (
             execution.get_data_dir(path_type="uri")
-            == FileSystemSetUp.from_str("work_dir/config_data").create_uri()
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/config_data").create_uri()
         )
 
         assert (
             execution.get_data_dir(path_type="path")
-            == FileSystemSetUp.from_str("work_dir/config_data").create_path()
+            == FileSystemSetUp.from_path(
+                tmp_path / "work_dir/config_data"
+            ).create_path()
         )
 
         with pytest.raises(PipelineConfigurationError):
             blank_context_with_config_none.get_data_dir(path_type="uri")
 
-    def test_resolve_output_root(self, execution) -> None:
+    def test_resolve_output_root(self, execution, tmp_path) -> None:
         """
         Tests that resolve_output_root method extracts the path from the given run
         directory or, if None are given, raises an error to indicate additional input
@@ -296,15 +306,17 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the run_dir attribute of the ExecutionContext instance is None.
         """
-        work_dir = FileSystemSetUp.from_str("work_dir")
+        work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
+        path_dir = tmp_path / "work_dir/runs"
+        path_dir.mkdir(parents=True, exist_ok=True)
         assert (
             execution.resolve_output_root(path_type="uri")
-            == FileSystemSetUp.from_str("work_dir/runs").create_uri()
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/runs").create_uri()
         )
 
         assert (
             execution.resolve_output_root(path_type="path")
-            == FileSystemSetUp.from_str("work_dir/runs").create_path()
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/runs").create_path()
         )
 
         execution_blank_config = ExecutionContext(
