@@ -8,6 +8,9 @@ from pathlib import Path, PurePosixPath
 from typing import IO, Any, Optional, Protocol, Type
 from urllib.parse import unquote, urlparse, urlsplit
 
+import boto3
+import botocore
+
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
@@ -273,7 +276,10 @@ class FileSystemSetUp:
         if not parsed.scheme:
             raise ValueError(f"Expected URI with scheme, got: {uri!r}")
 
-        prefix = f"{parsed.scheme}:///"
+        if parsed.scheme == "file":
+            prefix = f"{parsed.scheme}:///"
+        else:
+            prefix = f"{parsed.scheme}://"
 
         # Decode escaped characters and split path robustly
         raw_path = unquote(parsed.path or "")
@@ -861,10 +867,10 @@ class S3FileSystem:
         self.setup = setup
         root = setup.root
         self.dir_path: str = (
-            (root + "/" + setup.workspace_path) if setup.workspace_path else root
+            (setup.workspace_path + "/") if setup.workspace_path else root
         )
         self.data_path: str | None = (
-            (self.dir_path + "/" + setup.file_name) if setup.file_name else None
+            (self.dir_path + setup.file_name) if setup.file_name else None
         )
 
     def __str__(self) -> str:
@@ -908,15 +914,39 @@ class S3FileSystem:
         -------
         ``bool``
             True if the path exists, False otherwise.
-
-        Raises
-        ------
-        NotImplementedError
-            If the method is not implemented.
         """
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+        s3 = boto3.client("s3")
+        if type == "data":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot check existence of data file."
+                )
+            try:
+                s3.head_object(Bucket=self.setup.root, Key=self.data_path)
+                return True
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ("404", "NoSuchKey", "NotFound"):
+                    return False
+                else:
+                    raise
+
+        if type == "dir":
+            prefix = self.dir_path
+
+            try:
+                response = s3.list_objects_v2(
+                    Bucket=self.setup.root, Prefix=prefix, MaxKeys=1
+                )
+                return response.get("KeyCount", 0) > 0
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ("404", "NoSuchBucket", "NotFound"):
+                    return False
+                else:
+                    raise
+
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
 
     def is_file(
         self,
@@ -1112,5 +1142,4 @@ class FileSystemFactory:
 
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
-
-# TODO: add S3 to register
+FileSystemFactory.register("s3://", S3FileSystem)

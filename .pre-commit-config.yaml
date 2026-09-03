@@ -30,7 +30,7 @@ repos:
         name: mypy - Type check onsrap package
         entry: mypy
         language: python
-        additional_dependencies: [mypy, types-PyYAML]
+        additional_dependencies: [mypy, types-PyYAML, boto3-stubs, botocore-stubs]
         args: [onsrap]
         pass_filenames: false
   - repo: https://github.com/Yelp/detect-secrets
