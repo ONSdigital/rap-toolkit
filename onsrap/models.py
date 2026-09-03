@@ -155,11 +155,35 @@ class PipelineConfig:
 
     def __post_init__(self) -> None:
         """
-        Post-initialization method to ensure that the ``work_dir`` and ``project_root``
-        attributes are set correctly.
+        Post-initialization method to ensure that all directory attributes are
+        correctly typed as FileSystemSetUp instances and any other attributes are
+        stored in the correct formats.
         """
         if self.stages_to_run is None:
             self.stages_to_run = {}
+
+        if not isinstance(self.work_dir, FileSystemSetUp):
+            self.work_dir = FileSystemSetUp.confirm_typing(
+                self.work_dir, path_type="dir"
+            )
+        if self.project_root is not None and not isinstance(
+            self.project_root, FileSystemSetUp
+        ):
+            self.project_root = FileSystemSetUp.confirm_typing(
+                self.project_root, path_type="dir"
+            )
+        if self.output_dir is not None and not isinstance(
+            self.output_dir, FileSystemSetUp
+        ):
+            self.output_dir = FileSystemSetUp.confirm_typing(
+                self.output_dir, path_type="dir"
+            )
+        if not isinstance(self.log_dir, FileSystemSetUp):
+            self.log_dir = FileSystemSetUp.confirm_typing(self.log_dir, path_type="dir")
+        if not isinstance(self.data_dir, FileSystemSetUp):
+            self.data_dir = FileSystemSetUp.confirm_typing(
+                self.data_dir, path_type="dir"
+            )
 
     def __str__(self) -> str:
         """
