@@ -163,25 +163,27 @@ class PipelineConfig:
             self.stages_to_run = {}
 
         if not isinstance(self.work_dir, FileSystemSetUp):
-            self.work_dir = FileSystemSetUp.confirm_typing(
+            self.work_dir = FileSystemSetUp.file_system_setup_factory(
                 self.work_dir, path_type="dir"
             )
         if self.project_root is not None and not isinstance(
             self.project_root, FileSystemSetUp
         ):
-            self.project_root = FileSystemSetUp.confirm_typing(
+            self.project_root = FileSystemSetUp.file_system_setup_factory(
                 self.project_root, path_type="dir"
             )
         if self.output_dir is not None and not isinstance(
             self.output_dir, FileSystemSetUp
         ):
-            self.output_dir = FileSystemSetUp.confirm_typing(
+            self.output_dir = FileSystemSetUp.file_system_setup_factory(
                 self.output_dir, path_type="dir"
             )
         if not isinstance(self.log_dir, FileSystemSetUp):
-            self.log_dir = FileSystemSetUp.confirm_typing(self.log_dir, path_type="dir")
+            self.log_dir = FileSystemSetUp.file_system_setup_factory(
+                self.log_dir, path_type="dir"
+            )
         if not isinstance(self.data_dir, FileSystemSetUp):
-            self.data_dir = FileSystemSetUp.confirm_typing(
+            self.data_dir = FileSystemSetUp.file_system_setup_factory(
                 self.data_dir, path_type="dir"
             )
 
@@ -287,17 +289,17 @@ class PipelineConfig:
 
         backend = payload.pop("backend", "python")
         stages_to_run = PipelineConfig._extract_stages_run(payload)
-        work_dir = FileSystemSetUp.confirm_typing(
+        work_dir = FileSystemSetUp.file_system_setup_factory(
             payload.pop("work_dir", str(Path.cwd())), path_type="dir"
         )
-        project_root = FileSystemSetUp.confirm_typing(
+        project_root = FileSystemSetUp.file_system_setup_factory(
             payload.pop("project_root", None), path_type="dir"
         )
         output_dir_value = payload.pop("output_dir", None)
-        log_dir = FileSystemSetUp.confirm_typing(
+        log_dir = FileSystemSetUp.file_system_setup_factory(
             payload.pop("log_dir", "logs"), path_type="dir"
         )
-        data_dir = FileSystemSetUp.confirm_typing(
+        data_dir = FileSystemSetUp.file_system_setup_factory(
             payload.pop("data_dir", "data"), path_type="dir"
         )
 

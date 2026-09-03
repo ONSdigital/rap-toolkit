@@ -93,7 +93,7 @@ class PipelineRunner:
         runtime_id = pipeline._create_runtime_id()
         pipeline.id = runtime_id
         # copies the FileSystemSetUp in run_output to a new variable
-        run_dir_set_up = FileSystemSetUp.confirm_typing(
+        run_dir_set_up = FileSystemSetUp.file_system_setup_factory(
             pipeline.run_output, path_type="dir"
         )
         # changes the workspace path within the copied FileSystemSetUp to include the runtime_id
@@ -280,7 +280,9 @@ def _log_pipeline_attributes(
         The context of the current pipeline run, containing configuration and
         state information.
     """
-    attributes_file = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+    attributes_file = FileSystemSetUp.file_system_setup_factory(
+        run_dir, path_type="dir"
+    )
     attributes_file.file_name = (
         f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
     )

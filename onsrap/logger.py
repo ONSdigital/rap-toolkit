@@ -186,7 +186,7 @@ class Logger:
         """
 
         # confirms that run_root is a FileSystemSetUp instance and if not, creates it
-        run_root = FileSystemSetUp.confirm_typing(run_root, path_type="dir")
+        run_root = FileSystemSetUp.file_system_setup_factory(run_root, path_type="dir")
 
         # ensure that logger is writing to a file and extract filepath
         if not self._logger.hasHandlers():

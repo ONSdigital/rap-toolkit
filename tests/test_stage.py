@@ -244,7 +244,7 @@ class TestStage:
             metadata={},
         )
 
-        expected = FileSystemSetUp.confirm_typing(
+        expected = FileSystemSetUp.file_system_setup_factory(
             fake_home / "scripts" / "my_stage.py", path_type="file"
         )
         assert isinstance(stage.source, FileSystemSetUp)
@@ -280,7 +280,7 @@ class TestStage:
             metadata={},
         )
 
-        expected = FileSystemSetUp.confirm_typing(
+        expected = FileSystemSetUp.file_system_setup_factory(
             fake_home / "scripts" / "my_stage.py", path_type="file"
         )
         assert isinstance(stage.source, FileSystemSetUp)
@@ -326,7 +326,7 @@ class TestStage:
         assert stage_test.source_path == script.create_path()
         stage_test.source = 11
         assert stage_test.source_path is None
-        stage_test.source = FileSystemSetUp.confirm_typing(
+        stage_test.source = FileSystemSetUp.file_system_setup_factory(
             "not a file path", path_type="file"
         )
         assert stage_test.source_path is None
@@ -482,7 +482,9 @@ class TestValidateStage:
 
         setup, fs_setup = temp_script(filename="valid_script.py")
 
-        stage_test.source = FileSystemSetUp.confirm_typing(setup, path_type="file")
+        stage_test.source = FileSystemSetUp.file_system_setup_factory(
+            setup, path_type="file"
+        )
         assert stage_test.validate() is None
 
 
@@ -576,7 +578,9 @@ def temp_script(tmp_path):
     """
 
     def _create_script(content="def main(): pass\n", filename="temp_script.py"):
-        script = FileSystemSetUp.confirm_typing(tmp_path / filename, path_type="file")
+        script = FileSystemSetUp.file_system_setup_factory(
+            tmp_path / filename, path_type="file"
+        )
         script_fs = FileSystemFactory.create(script)
         script_fs.write_text(content, encoding="utf-8")
         return script, script_fs
@@ -647,7 +651,7 @@ class TestStageFromFile(TestStageFactories):
             If the source file doesn't exist when attempting to create a
             ``Stage`` instance
         """
-        source_file = FileSystemSetUp.confirm_typing(
+        source_file = FileSystemSetUp.file_system_setup_factory(
             tmp_path / "not_an_actual_file.py", path_type="file"
         )
         with pytest.raises(StageConfigurationError):
@@ -706,11 +710,11 @@ class TestStageFromFile(TestStageFactories):
         tilde_path = "~/scripts/my_stage.py"
 
         stage = Stage.from_file(
-            FileSystemSetUp.confirm_typing(tilde_path, path_type="file")
+            FileSystemSetUp.file_system_setup_factory(tilde_path, path_type="file")
         )
 
         expected = fake_home / "scripts" / "my_stage.py"
-        assert stage.source == FileSystemSetUp.confirm_typing(
+        assert stage.source == FileSystemSetUp.file_system_setup_factory(
             expected, path_type="file"
         )
 
@@ -821,9 +825,11 @@ class TestStageFromDict(TestStageFactories):
         }
         stage = Stage.from_dict(data)
         stage_2 = Stage.from_dict(data_2)
-        assert stage.source == FileSystemSetUp.confirm_typing(script, path_type="file")
+        assert stage.source == FileSystemSetUp.file_system_setup_factory(
+            script, path_type="file"
+        )
         assert stage.name == "test_Stage"
-        assert stage_2.source == FileSystemSetUp.confirm_typing(
+        assert stage_2.source == FileSystemSetUp.file_system_setup_factory(
             script, path_type="file"
         )
         assert stage_2.name == "test_Stage2"

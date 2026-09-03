@@ -34,7 +34,7 @@ class TestLogConfig:
         run_dir = tmp_path / "runs" / "synthetic_run"
         run_dir.mkdir(parents=True)
 
-        run_dir = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+        run_dir = FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir")
 
         config = PipelineConfig(
             name="synthetic_pipeline",
@@ -86,7 +86,9 @@ class TestLogConfig:
 
         _log_config(run_dir, context, manifest)
 
-        config_file = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+        config_file = FileSystemSetUp.file_system_setup_factory(
+            run_dir, path_type="dir"
+        )
         config_file.file_name = (
             "configuration_for_"
             f"{context.pipeline_name}_{context.started_at.date()}_"
@@ -285,7 +287,7 @@ class TestRunInfoWriteOut:
 
         _log_pipeline_attributes(
             pipeline_run=pipeline_run,
-            run_dir=FileSystemSetUp.confirm_typing(run_dir, path_type="dir"),
+            run_dir=FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir"),
             context=context,
         )
 
@@ -354,7 +356,7 @@ class TestRunInfoWriteOut:
 
         _log_pipeline_attributes(
             pipeline_run=pipeline_run,
-            run_dir=FileSystemSetUp.confirm_typing(run_dir, path_type="dir"),
+            run_dir=FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir"),
             context=context,
         )
 

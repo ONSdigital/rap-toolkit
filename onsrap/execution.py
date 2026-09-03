@@ -326,7 +326,7 @@ class ExecutionContext:
         """
         result = self.result_for(stage_name) if stage_name is not None else None
         if not isinstance(root, FileSystemSetUp):
-            new_root = FileSystemSetUp.confirm_typing(root, path_type="dir")
+            new_root = FileSystemSetUp.file_system_setup_factory(root, path_type="dir")
         else:
             new_root = root
         file_system = FileSystemFactory.create(new_root)
@@ -636,9 +636,8 @@ class PythonStageExecutor:
             If the entrypoint is not found.
         """
 
-        # TODO: This needs to shift based on file system
         path = stage.source
-        path = FileSystemSetUp.confirm_typing(path, path_type="file")
+        path = FileSystemSetUp.file_system_setup_factory(path, path_type="file")
 
         assert isinstance(path, FileSystemSetUp)
 

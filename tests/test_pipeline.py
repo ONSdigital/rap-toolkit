@@ -889,7 +889,7 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
         assert result is expected_run
 
         expected_path = (
-            FileSystemSetUp.confirm_typing(
+            FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/"
@@ -940,7 +940,7 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
         pipeline_no_history._load_latest_run()
 
         expected_path = (
-            FileSystemSetUp.confirm_typing(
+            FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/"
@@ -1316,7 +1316,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert len(result) == 1
         assert "run_A" in result
         mock_loader.assert_called_once_with(
-            run_dir=FileSystemSetUp.confirm_typing(
+            run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/run_A"
@@ -1372,13 +1372,13 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert len(result) == 2
         assert "run_A" in result and "run_B" in result
         mock_loader.assert_any_call(
-            run_dir=FileSystemSetUp.confirm_typing(
+            run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/run_A"
         )
         mock_loader.assert_any_call(
-            run_dir=FileSystemSetUp.confirm_typing(
+            run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/run_B"
@@ -1431,7 +1431,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         assert len(result) == 1
         assert "run_A" not in result and "run_B" in result
         mock_loader.assert_called_once_with(
-            run_dir=FileSystemSetUp.confirm_typing(
+            run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
             + "/run_B"

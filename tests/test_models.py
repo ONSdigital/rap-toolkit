@@ -99,10 +99,18 @@ def expected_pipeline_config() -> PipelineConfig:
     return PipelineConfig(
         name="test_rap",
         backend="python",
-        work_dir=FileSystemSetUp.confirm_typing(Path("tmp/work"), path_type="dir"),
-        project_root=FileSystemSetUp.confirm_typing(Path("project"), path_type="dir"),
-        log_dir=FileSystemSetUp.confirm_typing(Path("tmp/logs"), path_type="dir"),
-        data_dir=FileSystemSetUp.confirm_typing(Path("tmp/data"), path_type="dir"),
+        work_dir=FileSystemSetUp.file_system_setup_factory(
+            Path("tmp/work"), path_type="dir"
+        ),
+        project_root=FileSystemSetUp.file_system_setup_factory(
+            Path("project"), path_type="dir"
+        ),
+        log_dir=FileSystemSetUp.file_system_setup_factory(
+            Path("tmp/logs"), path_type="dir"
+        ),
+        data_dir=FileSystemSetUp.file_system_setup_factory(
+            Path("tmp/data"), path_type="dir"
+        ),
         allow_subprocess_fallback=True,
         python_executable=None,
         metadata={"variables": ["name", "age"], "num_stages": 6},
@@ -241,7 +249,7 @@ class TestPipelineConfig:
             encoding="utf-8",
         )
 
-        pipeline_config_fssetup = FileSystemSetUp.confirm_typing(
+        pipeline_config_fssetup = FileSystemSetUp.file_system_setup_factory(
             pipeline_config, path_type="file"
         )
         configuration = PipelineConfig.from_file(pipeline_config_fssetup)
@@ -261,17 +269,17 @@ class TestPipelineConfig:
         assert pipelineconfig.to_dict() == {
             "name": "test_rap",
             "backend": "python",
-            "work_dir": FileSystemSetUp.confirm_typing(
+            "work_dir": FileSystemSetUp.file_system_setup_factory(
                 Path("tmp/work"), path_type="dir"
             ).create_uri(),
-            "project_root": FileSystemSetUp.confirm_typing(
+            "project_root": FileSystemSetUp.file_system_setup_factory(
                 Path("project"), path_type="dir"
             ).create_uri(),
             "output_dir": None,
-            "log_dir": FileSystemSetUp.confirm_typing(
+            "log_dir": FileSystemSetUp.file_system_setup_factory(
                 Path("tmp/logs"), path_type="dir"
             ).create_uri(),
-            "data_dir": FileSystemSetUp.confirm_typing(
+            "data_dir": FileSystemSetUp.file_system_setup_factory(
                 Path("tmp/data"), path_type="dir"
             ).create_uri(),
             "allow_subprocess_fallback": True,

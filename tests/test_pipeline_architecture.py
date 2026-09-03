@@ -27,9 +27,13 @@ OUTPUT_DIRECTORY_WARNING = (
 def _base_pipeline_config(tmp_path: Path) -> dict:
     return {
         "pipeline_config": {
-            "work_dir": FileSystemSetUp.confirm_typing(tmp_path, path_type="dir"),
-            "project_root": FileSystemSetUp.confirm_typing(tmp_path, path_type="dir"),
-            "log_dir": FileSystemSetUp.confirm_typing(
+            "work_dir": FileSystemSetUp.file_system_setup_factory(
+                tmp_path, path_type="dir"
+            ),
+            "project_root": FileSystemSetUp.file_system_setup_factory(
+                tmp_path, path_type="dir"
+            ),
+            "log_dir": FileSystemSetUp.file_system_setup_factory(
                 tmp_path / "logs", path_type="dir"
             ),
         },
@@ -457,13 +461,14 @@ class TestPipelineFromConfig:
             pipeline = Pipeline.from_config(config_file)
 
         assert pipeline.name == "parse-test"
-        assert pipeline.config.work_dir == FileSystemSetUp.confirm_typing(
+        assert pipeline.config.work_dir == FileSystemSetUp.file_system_setup_factory(
             tmp_path, path_type="dir"
         )
-        assert pipeline.config.project_root == FileSystemSetUp.confirm_typing(
-            tmp_path, path_type="dir"
+        assert (
+            pipeline.config.project_root
+            == FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
         )
-        assert pipeline.config.log_dir == FileSystemSetUp.confirm_typing(
+        assert pipeline.config.log_dir == FileSystemSetUp.file_system_setup_factory(
             (tmp_path / "logs"), path_type="dir"
         )
         assert [stage.name for stage in pipeline.stages] == ["0_extract", "1_transform"]

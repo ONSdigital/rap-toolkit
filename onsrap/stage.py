@@ -99,7 +99,9 @@ class Stage:
             raise StageConfigurationError("Stage name cannot be empty.")
 
         if self.source is not None and not callable(self.source):
-            self.source = FileSystemSetUp.confirm_typing(self.source, path_type="file")
+            self.source = FileSystemSetUp.file_system_setup_factory(
+                self.source, path_type="file"
+            )
             if not isinstance(self.source, (FileSystemSetUp, Path, str)):
                 raise StageConfigurationError(
                     "Stage source must be a FileSystemSetUp, Path, string, callable, or None."
@@ -388,7 +390,7 @@ class Stage:
         if isinstance(self.source, Path):
             return self.source
         if isinstance(self.source, str):
-            source_fssetup = FileSystemSetUp.confirm_typing(
+            source_fssetup = FileSystemSetUp.file_system_setup_factory(
                 self.source, path_type="file"
             )
             return source_fssetup.create_path() if source_fssetup else None

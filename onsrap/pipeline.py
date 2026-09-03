@@ -101,7 +101,9 @@ class Pipeline:
             self.config.name = self.name
 
         self.logger = logger or Logger(
-            log_dir=FileSystemSetUp.confirm_typing(self.config.log_dir, path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                self.config.log_dir, path_type="dir"
+            )
         )
 
         if stages is not None and configured_stages:
@@ -627,7 +629,7 @@ class Pipeline:
 
         try:
             latest_run = (
-                FileSystemSetUp.confirm_typing(
+                FileSystemSetUp.file_system_setup_factory(
                     self.run_output, path_type="dir"
                 ).create_uri()
                 + "/"
@@ -683,7 +685,7 @@ class Pipeline:
                 continue
             try:
                 all_runs[run_id] = load_historical_run(
-                    run_dir=FileSystemSetUp.confirm_typing(
+                    run_dir=FileSystemSetUp.file_system_setup_factory(
                         self.run_output, path_type="dir"
                     ).create_uri()
                     + "/"
@@ -713,7 +715,7 @@ class Pipeline:
             the directory for the run outputs.
         """
         if self.config.output_dir is not None:
-            run_output = FileSystemSetUp.confirm_typing(
+            run_output = FileSystemSetUp.file_system_setup_factory(
                 self.config.output_dir, path_type="dir"
             )
         else:
@@ -721,7 +723,7 @@ class Pipeline:
                 "Output directory is not specified. Using project root or work directory as the run output.",
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
-            run_output = FileSystemSetUp.confirm_typing(
+            run_output = FileSystemSetUp.file_system_setup_factory(
                 self.config.project_root or self.config.work_dir, path_type="dir"
             )
 
@@ -729,7 +731,7 @@ class Pipeline:
             run_output.workspace_path = "/runs"
         else:
             run_output.workspace_path = run_output.workspace_path + "/runs"
-        return FileSystemSetUp.confirm_typing(run_output, path_type="dir")
+        return FileSystemSetUp.file_system_setup_factory(run_output, path_type="dir")
 
     def _coerce_stage(
         self,
@@ -1967,7 +1969,7 @@ class Pipeline:
             return candidate_fs.data_path
 
         work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
-        work_dir_candidate_fs_setup = FileSystemSetUp.confirm_typing(
+        work_dir_candidate_fs_setup = FileSystemSetUp.file_system_setup_factory(
             work_dir_candidate, path_type="file"
         )
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)

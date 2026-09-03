@@ -29,13 +29,15 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             it is not writing to a file path and cannot extract historical run ids.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
         logger._logger.handlers.clear()  # Remove all handlers to simulate no file logging
         logger._logger.propagate = False  # Prevent checking root logger handlers
         with pytest.raises(HistoricalPipelineLoadError, match="does not write to a"):
             logger.extract_historical_run_ids(
-                run_root=FileSystemSetUp.confirm_typing(
+                run_root=FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs", path_type="dir"
                 ),
                 name="test_pipeline",
@@ -60,14 +62,16 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             it is not writing to a file path and cannot extract historical run ids.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
         logger._logger.handlers = [logging.StreamHandler()]
         with pytest.raises(
             HistoricalPipelineLoadError, match="does not have a FileHandler"
         ):
             logger.extract_historical_run_ids(
-                run_root=FileSystemSetUp.confirm_typing(
+                run_root=FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs", path_type="dir"
                 ),
                 name="test_pipeline",
@@ -85,7 +89,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             and directories.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -103,7 +109,7 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             HistoricalPipelineLoadError, match="does not exist at this location"
         ):
             logger.extract_historical_run_ids(
-                run_root=FileSystemSetUp.confirm_typing(
+                run_root=FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs", path_type="dir"
                 ),
                 name="test_pipeline",
@@ -121,7 +127,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             and directories.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -137,7 +145,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         )
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result == []
@@ -156,7 +166,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             and directories.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -180,21 +192,23 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         create_run_dir_2.mkdir(parents=True, exist_ok=True)
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result == [
             {
                 "run_id": "2026-06-23_101719_abc1234",
                 "timestamp": "2026-08-10 10:00:02,000",
-                "run_dir": FileSystemSetUp.confirm_typing(
+                "run_dir": FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs" / "2026-06-23_101719_abc1234", path_type="dir"
                 ).create_uri(),
             },
             {
                 "run_id": "2026-06-23_101719_878fcb33",
                 "timestamp": "2026-08-10 10:00:01,000",
-                "run_dir": FileSystemSetUp.confirm_typing(
+                "run_dir": FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs" / "2026-06-23_101719_878fcb33", path_type="dir"
                 ).create_uri(),
             },
@@ -223,7 +237,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             contains a record without a run_id.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -238,7 +254,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         (tmp_path / "runs").mkdir(parents=True, exist_ok=True)
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result == expected
@@ -255,7 +273,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         """
 
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -275,14 +295,16 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         create_run_dir_1.mkdir(parents=True, exist_ok=True)
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result == [
             {
                 "run_id": "2026-06-23_101719_878fcb33",
                 "timestamp": "2026-08-10 10:00:01,000",
-                "run_dir": FileSystemSetUp.confirm_typing(
+                "run_dir": FileSystemSetUp.file_system_setup_factory(
                     tmp_path / "runs" / "2026-06-23_101719_878fcb33", path_type="dir"
                 ).create_uri(),
             }
@@ -300,7 +322,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             and directories.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -323,7 +347,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         create_run_dir_2.mkdir(parents=True, exist_ok=True)
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result[0]["run_id"] == "2026-06-23_101719_abc1234"
@@ -340,7 +366,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
             and directories.
         """
         logger = Logger(
-            log_dir=FileSystemSetUp.confirm_typing(tmp_path / "logs", path_type="dir")
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            )
         )
 
         file_handler = next(
@@ -358,7 +386,9 @@ class TestExtractHistoricalRunIds(TestLoadLatestRunIntegration):
         create_run_dir_1.mkdir(parents=True, exist_ok=True)
 
         result = logger.extract_historical_run_ids(
-            run_root=FileSystemSetUp.confirm_typing(tmp_path / "runs", path_type="dir"),
+            run_root=FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "runs", path_type="dir"
+            ),
             name="test_pipeline",
         )
         assert result == []

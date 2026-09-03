@@ -131,17 +131,36 @@ class FileSystemSetUp:
         ``FileSystemSetUp``
             The derived FileSystemSetUp object.
         """
-        if isinstance(path, FileSystemSetUp):
-            return path
-        elif isinstance(path, str):
+        if isinstance(path, str):
             return cls.from_str(path, path_type)
         elif isinstance(path, Path):
             return cls.from_path(path, path_type)
         elif path is None:
-            raise ValueError("Input path cannot be None.")
+            raise ValueError(
+                "You cannot create a FileSystemSetUp instance from a "
+                "Nonetype. Please enter a str or Path."
+            )
         else:
             raise TypeError(
-                f"Your input is not a str/Path and cannot be converted to one. Please check your input type: {type(path)}."
+                f"Your input is not a str/Path and cannot be converted to one. Please "
+                f"check your input type: {type(path)}."
+            )
+
+    @classmethod
+    def file_system_setup_factory(cls, input: Any, path_type: str):
+        if isinstance(input, FileSystemSetUp):
+            new_fs_setup = FileSystemSetUp(
+                prefix=input.prefix,
+                root=input.root,
+                workspace_path=input.workspace_path,
+                file_name=input.file_name,
+            )
+            return new_fs_setup
+        elif isinstance(input, (str, Path)):
+            return cls.from_any(input, path_type=path_type)
+        else:
+            raise TypeError(
+                f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
             )
 
     @staticmethod
@@ -286,23 +305,6 @@ class FileSystemSetUp:
         file_name = None if type == "dir" else (tail[-1] if tail else None)
         workspace_path = "/".join(tail[:-1] if file_name else tail) or None
         return prefix, root, workspace_path, file_name
-
-    @classmethod
-    def confirm_typing(cls, input: Any, path_type: str):
-        if isinstance(input, FileSystemSetUp):
-            new_fs_setup = FileSystemSetUp(
-                prefix=input.prefix,
-                root=input.root,
-                workspace_path=input.workspace_path,
-                file_name=input.file_name,
-            )
-            return new_fs_setup
-        elif isinstance(input, (str, Path)):
-            return cls.from_any(input, path_type=path_type)
-        else:
-            raise TypeError(
-                f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
-            )
 
     def create_path(self) -> Path | None:
         """
@@ -908,7 +910,7 @@ class FileSystemFactory:
         ``FileSystem``
             An updated instance of the appropriate file system class.
         """
-        setup = FileSystemSetUp.confirm_typing(path, path_type=path_type)
+        setup = FileSystemSetUp.file_system_setup_factory(path, path_type=path_type)
         fs = cls.create(setup)
         return fs
 

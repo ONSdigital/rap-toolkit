@@ -188,7 +188,7 @@ def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
     ``PipelineRun``
         An instance of ``PipelineRun`` representing the historical run.
     """
-    run_dir_setup = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+    run_dir_setup = FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir")
     file_system = FileSystemFactory.create(run_dir_setup)
 
     search_path = "pipeline_attributes_for_*.yaml"
