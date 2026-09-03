@@ -34,6 +34,8 @@ class TestLogConfig:
         run_dir = tmp_path / "runs" / "synthetic_run"
         run_dir.mkdir(parents=True)
 
+        run_dir = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+
         config = PipelineConfig(
             name="synthetic_pipeline",
             stages_to_run={"stage_a": True},
@@ -84,12 +86,16 @@ class TestLogConfig:
 
         _log_config(run_dir, context, manifest)
 
-        expected_file = run_dir / (
+        config_file = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+        config_file.file_name = (
             "configuration_for_"
             f"{context.pipeline_name}_{context.started_at.date()}_"
             f"{context.run_id[-8:]}.yaml"
         )
 
+        expected_file = config_file.create_path()
+
+        assert expected_file is not None
         assert expected_file.exists()
 
         file_text = expected_file.read_text(encoding="utf-8")

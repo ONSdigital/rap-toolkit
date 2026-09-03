@@ -450,7 +450,7 @@ class PythonStageExecutor:
             )
 
         # TODO: This needs to shift based on file system
-        if isinstance(stage.source, Path):
+        if isinstance(stage.source, FileSystemSetUp):
             return self._execute_file(stage, context)
 
         raise StageExecutionError(
@@ -670,17 +670,18 @@ class PythonStageExecutor:
             source=str(path),
         )
 
+        # TODO: currently subprocess will only work with LFS. Need an alternative for remote
         command = [str(path.create_uri())]
         stage_fs = FileSystemFactory.create(path)
         if stage_fs.suffix().lower() == ".py":
             command = [
                 context.config.python_executable or sys.executable,
-                str(path.create_uri()),
+                str(path.create_path()),
             ]
 
         completed = subprocess.run(
             command,
-            cwd=str(context.working_directory),
+            cwd=str(context.working_directory.create_path()),
             capture_output=True,
             text=True,
             check=False,

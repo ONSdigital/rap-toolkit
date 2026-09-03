@@ -713,14 +713,23 @@ class Pipeline:
             the directory for the run outputs.
         """
         if self.config.output_dir is not None:
-            run_output = self.config.output_dir
+            run_output = FileSystemSetUp.confirm_typing(
+                self.config.output_dir, path_type="dir"
+            )
         else:
             warnings.warn(
                 "Output directory is not specified. Using project root or work directory as the run output.",
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
-            run_output = self.config.project_root or self.config.work_dir
-        return FileSystemSetUp.from_any(run_output).create_uri() + "/runs"
+            run_output = FileSystemSetUp.confirm_typing(
+                self.config.project_root or self.config.work_dir, path_type="dir"
+            )
+
+        if run_output.workspace_path is None:
+            run_output.workspace_path = "/runs"
+        else:
+            run_output.workspace_path = run_output.workspace_path + "/runs"
+        return FileSystemSetUp.confirm_typing(run_output, path_type="dir")
 
     def _coerce_stage(
         self,

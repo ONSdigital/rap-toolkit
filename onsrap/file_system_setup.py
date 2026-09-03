@@ -290,7 +290,13 @@ class FileSystemSetUp:
     @classmethod
     def confirm_typing(cls, input: Any, path_type: str):
         if isinstance(input, FileSystemSetUp):
-            return input
+            new_fs_setup = FileSystemSetUp(
+                prefix=input.prefix,
+                root=input.root,
+                workspace_path=input.workspace_path,
+                file_name=input.file_name,
+            )
+            return new_fs_setup
         elif isinstance(input, (str, Path)):
             return cls.from_any(input, path_type=path_type)
         else:
@@ -314,9 +320,13 @@ class FileSystemSetUp:
             if self.workspace_path:
                 if self.file_name:
                     source_path = Path(self.root) / self.workspace_path / self.file_name
-                source_path = Path(self.root) / self.workspace_path
-            if self.file_name:
+                else:
+                    source_path = Path(self.root) / self.workspace_path
+            elif self.file_name:
                 source_path = Path(self.root) / self.file_name
+            else:
+                source_path = Path(self.root)
+
             if source_path.exists():
                 return source_path
             else:

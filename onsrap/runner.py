@@ -92,10 +92,15 @@ class PipelineRunner:
 
         runtime_id = pipeline._create_runtime_id()
         pipeline.id = runtime_id
-
-        run_dir_str = pipeline.run_output.create_uri() + "/" + str(runtime_id.get_id())
-        set_up = FileSystemSetUp.from_any(run_dir_str)
-        file_system = FileSystemFactory.create(set_up)
+        # copies the FileSystemSetUp in run_output to a new variable
+        run_dir_set_up = FileSystemSetUp.confirm_typing(
+            pipeline.run_output, path_type="dir"
+        )
+        # changes the workspace path within the copied FileSystemSetUp to include the runtime_id
+        run_dir_set_up.workspace_path = (
+            run_dir_set_up.workspace_path + "/" + str(runtime_id.get_id())
+        )
+        file_system = FileSystemFactory.create(run_dir_set_up)
         file_system.mkdir(parents=True, exist_ok=True)
 
         # Initialise the ExecutionContext which will be passed to each stage as it runs. This
@@ -106,7 +111,7 @@ class PipelineRunner:
             run_id=runtime_id.get_id(),
             config=pipeline.config,
             logger=self.logger,
-            run_dir=set_up,
+            run_dir=run_dir_set_up,
             started_at=started_at,
             working_directory=pipeline.config.work_dir,
             stage_configs=dict(pipeline.stage_configs),
@@ -121,7 +126,7 @@ class PipelineRunner:
         manifest.outputs = {}
         pipeline.manifest = manifest
 
-        _log_config(set_up, context, manifest)
+        _log_config(run_dir_set_up, context, manifest)
 
         self.logger.event(
             "Pipeline started",
@@ -170,7 +175,9 @@ class PipelineRunner:
 
             # Creates attributes file in the run_directory to log information for later
             # analysis of pipeline runs
-            _log_pipeline_attributes(pipeline_run=run, run_dir=set_up, context=context)
+            _log_pipeline_attributes(
+                pipeline_run=run, run_dir=run_dir_set_up, context=context
+            )
 
             self.logger.event(
                 "Pipeline failed",
@@ -195,7 +202,9 @@ class PipelineRunner:
 
         # Creates attributes file in the run_directory to log information for later
         # analysis of pipeline runs
-        _log_pipeline_attributes(pipeline_run=run, run_dir=set_up, context=context)
+        _log_pipeline_attributes(
+            pipeline_run=run, run_dir=run_dir_set_up, context=context
+        )
 
         self.logger.event(
             "Pipeline completed",
@@ -265,19 +274,17 @@ def _log_pipeline_attributes(
         The PipelineRun instance for the current run of the pipeline.
     ``stage_results`` : list[StageResult]
         A list of StageResult instances for the current run of the pipeline.
-    ``run_dir`` : Path
+    ``run_dir`` : FileSystemSetUp
         The directory where the pipeline run is being currently being executed.
     ``context`` : ExecutionContext
         The context of the current pipeline run, containing configuration and
         state information.
     """
-    attributes_file = (
-        str(run_dir.create_uri())
-        + f"/pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
+    attributes_file = FileSystemSetUp.confirm_typing(run_dir, path_type="dir")
+    attributes_file.file_name = (
+        f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
     )
-
-    attributes_setup = FileSystemSetUp.from_any(attributes_file)
-    file_system = FileSystemFactory.create(attributes_setup)
+    file_system = FileSystemFactory.create(attributes_file)
     import yaml
 
     with file_system.open(mode="w", encoding="utf-8") as f:
@@ -287,7 +294,7 @@ def _log_pipeline_attributes(
 
 
 def _log_config(
-    run_dir: Path, context: ExecutionContext, manifest: RunManifest
+    run_dir: FileSystemSetUp, context: ExecutionContext, manifest: RunManifest
 ) -> None:
     """
     Outputs the configurations used in an instance of a pipeline to a YAML file in the run directory.
@@ -296,7 +303,7 @@ def _log_config(
 
     Parameters
     ----------
-    ``run_dir`` : Path
+    ``run_dir`` : FileSystemSetUp
         The directory where the pipeline run is being executed.
     ``context`` : ExecutionContext
         The context of the current pipeline run, containing configuration and state information.
@@ -304,16 +311,20 @@ def _log_config(
         The manifest of the current pipeline run, containing metadata and outputs.
     """
     date = context.started_at.date()
-
-    config_file = (
-        run_dir
-        / f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"
+    config_file = FileSystemSetUp(
+        prefix=run_dir.prefix,
+        root=run_dir.root,
+        workspace_path=run_dir.workspace_path,
+        file_name=run_dir.file_name,
+    )
+    config_file.file_name = (
+        f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"
     )
     import yaml
 
     config_to_dump = _yaml_safe_encode(manifest.config)
-
-    with open(config_file, "w", encoding="utf-8") as f:
+    file_system = FileSystemFactory.create(config_file)
+    with file_system.open(mode="w", encoding="utf-8") as f:
         yaml.safe_dump(config_to_dump or {}, f, default_flow_style=False)
 
 
