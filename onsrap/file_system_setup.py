@@ -298,9 +298,12 @@ class FileSystemSetUp:
                 f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
             )
 
-    def create_path(self) -> Path:
+    def create_path(self) -> Path | None:
         """
-        Create a Path object from the FileSystemSetUp instance.
+        Create a Path object from the FileSystemSetUp instance. This will only return
+        a Path object for local file systems (file:/// prefix). For other prefixes,
+        it will raise a TypeError. It will also check that the created path exists
+        before returning it as a validation check.
 
         Returns
         -------
@@ -310,17 +313,16 @@ class FileSystemSetUp:
         if self.prefix == "file:///":
             if self.workspace_path:
                 if self.file_name:
-                    return Path(self.root) / self.workspace_path / self.file_name
-                return Path(self.root) / self.workspace_path
+                    source_path = Path(self.root) / self.workspace_path / self.file_name
+                source_path = Path(self.root) / self.workspace_path
             if self.file_name:
-                return Path(self.root) / self.file_name
-            return Path(self.root)
+                source_path = Path(self.root) / self.file_name
+            if source_path.exists():
+                return source_path
+            else:
+                return None
         else:
-            raise TypeError(
-                f"Your FileSystemSetUp is not for a Local File System. "
-                f"It contains the prefix {self.prefix}. This method is only "
-                f"for Local File Systems."
-            )
+            return None
 
 
 class FileSystem(Protocol):

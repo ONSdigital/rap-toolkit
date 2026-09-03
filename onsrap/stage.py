@@ -356,7 +356,7 @@ class Stage:
         """
         if not (isinstance(self.source, FileSystemSetUp) or callable(self.source)):
             raise StageConfigurationError(
-                f"Stage '{self.name}' must have a Path or Callable source."
+                f"Stage '{self.name}' must have a Path or Callable source. Your source {self.source} is {type(self.source)}"
             )
 
         if self.source is None or self.source == "":
@@ -372,17 +372,26 @@ class Stage:
                 )
 
     @property
-    def source_path(self) -> Optional[str]:
+    def source_path(self) -> Optional[Path]:
         """
-        Sets a property for the ``Stage`` class if the ``source`` is a FileSystemSetUp.
+        Sets a property for the ``Stage`` class if the ``source`` can be converted to
+        a Path instance. This normalises through FileSystemSetUp where required.
 
         Returns
         -------
-        ``str``
-            Version of the ``source`` attribute as a string if it is a FileSystemSetUp. Otherwise, returns None.
+        ``Path``
+            Version of the ``source`` attribute as a Path if it is a FileSystemSetUp. Otherwise, returns None.
         """
+
         if isinstance(self.source, FileSystemSetUp):
-            return self.source.create_uri()
+            return self.source.create_path()
+        if isinstance(self.source, Path):
+            return self.source
+        if isinstance(self.source, str):
+            source_fssetup = FileSystemSetUp.confirm_typing(
+                self.source, path_type="file"
+            )
+            return source_fssetup.create_path() if source_fssetup else None
         return None
 
     @property
@@ -399,6 +408,9 @@ class Stage:
 
         if isinstance(self.source, FileSystemSetUp):
             return self.source.create_uri()
+
+        if isinstance(self.source, (Path, str)):
+            return str(self.source)
 
         return None
 

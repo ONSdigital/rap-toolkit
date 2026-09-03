@@ -4,6 +4,7 @@ from textwrap import dedent
 import pytest
 
 from onsrap.errors import StageDependencyError
+from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 from onsrap.stage import Stage, StageConfigurationError, _normalize_dependencies
 
 
@@ -135,11 +136,11 @@ class TestStage:
 
         Raises
         ------
-        ``StageConfigurationError``
-            If the source is not a valid callable or file path in a ``Stage`` class
+        ``TypeError``
+            If source is not a callable and cannot be turned into a FileSystemSetUp
             instance.
         """
-        with pytest.raises(StageConfigurationError):
+        with pytest.raises(TypeError):
             Stage("callable_stage", 11, ["stage_1"], {"info": "example"})
 
     def test_stage_backend(self, example_function) -> None:
@@ -243,8 +244,10 @@ class TestStage:
             metadata={},
         )
 
-        expected = fake_home / "scripts" / "my_stage.py"
-        assert isinstance(stage.source, Path)
+        expected = FileSystemSetUp.confirm_typing(
+            fake_home / "scripts" / "my_stage.py", path_type="file"
+        )
+        assert isinstance(stage.source, FileSystemSetUp)
         assert stage.source == expected
 
     def test_stage_constructor_expands_path_source_with_home(
@@ -277,8 +280,10 @@ class TestStage:
             metadata={},
         )
 
-        expected = fake_home / "scripts" / "my_stage.py"
-        assert isinstance(stage.source, Path)
+        expected = FileSystemSetUp.confirm_typing(
+            fake_home / "scripts" / "my_stage.py", path_type="file"
+        )
+        assert isinstance(stage.source, FileSystemSetUp)
         assert stage.source == expected
 
     def test_normalise_dependencies_within_stage_init(self, example_function) -> None:
@@ -299,7 +304,9 @@ class TestStage:
         )
         assert stage.dependencies == ("dep1", "dep2", "dep3")
 
-    def test_source_path(self, stage_test, tmp_path, example_function) -> None:
+    def test_source_path(
+        self, stage_test, tmp_path, example_function, temp_script
+    ) -> None:
         """
         Tests whether source_path detects a path vs other valid and invalid source
         types.
@@ -314,11 +321,14 @@ class TestStage:
         ``example_function`` : callable
             A callable function to pass as a source for a ``Stage`` class instance.
         """
-        stage_test.source = tmp_path / "fake_file.py"
-        assert stage_test.source_path == tmp_path / "fake_file.py"
+        script, _ = temp_script(filename="temp_script.py")
+        stage_test.source = script
+        assert stage_test.source_path == script.create_path()
         stage_test.source = 11
         assert stage_test.source_path is None
-        stage_test.source = "not a file path"
+        stage_test.source = FileSystemSetUp.confirm_typing(
+            "not a file path", path_type="file"
+        )
         assert stage_test.source_path is None
         stage_test.source = example_function
         assert stage_test.source_path is None
@@ -470,7 +480,9 @@ class TestValidateStage:
         stage_test.source = example_function
         assert stage_test.validate() is None
 
-        stage_test.source = temp_script(filename="valid_script.py")
+        setup, fs_setup = temp_script(filename="valid_script.py")
+
+        stage_test.source = FileSystemSetUp.confirm_typing(setup, path_type="file")
         assert stage_test.validate() is None
 
 
@@ -564,9 +576,10 @@ def temp_script(tmp_path):
     """
 
     def _create_script(content="def main(): pass\n", filename="temp_script.py"):
-        script = tmp_path / filename
-        script.write_text(content, encoding="utf-8")
-        return script
+        script = FileSystemSetUp.confirm_typing(tmp_path / filename, path_type="file")
+        script_fs = FileSystemFactory.create(script)
+        script_fs.write_text(content, encoding="utf-8")
+        return script, script_fs
 
     return _create_script
 
@@ -593,7 +606,7 @@ class TestStageFromFile(TestStageFactories):
             A temporary path provided by pytest for testing file creation and
             manipulation.
         """
-        test_stage = temp_script(
+        test_stage, test_stage_fs = temp_script(
             dedent(
                 """
                 def main():
@@ -606,11 +619,16 @@ class TestStageFromFile(TestStageFactories):
         )
 
         assert Stage.from_file(test_stage, entrypoint="main") == Stage(
-            "test_stage", test_stage.resolve(), (), {}, "main", "python"
+            "test_stage.py",
+            test_stage_fs.resolve(type="data"),
+            (),
+            {},
+            "main",
+            "python",
         )
 
         assert Stage.from_file(test_stage, name="Stage_1", entrypoint="main") == Stage(
-            "Stage_1", test_stage.resolve(), (), {}, "main", "python"
+            "Stage_1", test_stage_fs.resolve(type="data"), (), {}, "main", "python"
         )
 
     def test_stage_from_files_error(self, tmp_path: Path) -> None:
@@ -629,14 +647,17 @@ class TestStageFromFile(TestStageFactories):
             If the source file doesn't exist when attempting to create a
             ``Stage`` instance
         """
-        source_file = tmp_path / "not_an_actual_file.py"
+        source_file = FileSystemSetUp.confirm_typing(
+            tmp_path / "not_an_actual_file.py", path_type="file"
+        )
         with pytest.raises(StageConfigurationError):
             Stage.from_file(source_file)
 
     def test_from_file_resolves_relative_to_absolute(self, temp_script, monkeypatch):
         """
-        Tests that a relative path passed to from_file is resolved to an
-        absolute path on the Stage source attribute.
+        Tests that a relative path passed to from_file is resolved to a
+        FileSystemSetUp instance on the Stage source attribute. Checks that
+        this FileSystemSetUp can be resolved to an absolute path.
 
         Parameters
         ----------
@@ -646,14 +667,16 @@ class TestStageFromFile(TestStageFactories):
             A pytest fixture that allows for temporary modification of environment
             variables and other attributes during testing.
         """
-        script = temp_script()
+        script, script_fs = temp_script()
 
-        monkeypatch.chdir(script.parent)
+        monkeypatch.chdir(script_fs.parent(path_type="data"))
 
-        stage = Stage.from_file(script.name)
+        stage = Stage.from_file(script)
 
-        assert stage.source.is_absolute()
-        assert stage.source == script.resolve()
+        resolved = script_fs.resolve(type="data")
+
+        assert isinstance(stage.source, FileSystemSetUp)
+        assert resolved is not None
 
     def test_from_file_expands_source_path(self, tmp_path, monkeypatch):
         """
@@ -680,10 +703,16 @@ class TestStageFromFile(TestStageFactories):
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text("def main(): pass\n", encoding="utf-8")
 
-        stage = Stage.from_file("~/scripts/my_stage.py")
+        tilde_path = "~/scripts/my_stage.py"
+
+        stage = Stage.from_file(
+            FileSystemSetUp.confirm_typing(tilde_path, path_type="file")
+        )
 
         expected = fake_home / "scripts" / "my_stage.py"
-        assert stage.source == expected
+        assert stage.source == FileSystemSetUp.confirm_typing(
+            expected, path_type="file"
+        )
 
 
 class TestStageFromCallable(TestStageFactories):
@@ -767,7 +796,7 @@ class TestStageFromDict(TestStageFactories):
         ``temp_script`` : callable
             A fixture factory that creates temporary Python scripts.
         """
-        script = temp_script(
+        script, script_fs = temp_script(
             dedent(
                 """
                 def main():
@@ -792,9 +821,11 @@ class TestStageFromDict(TestStageFactories):
         }
         stage = Stage.from_dict(data)
         stage_2 = Stage.from_dict(data_2)
-        assert stage.source == script.resolve()
+        assert stage.source == FileSystemSetUp.confirm_typing(script, path_type="file")
         assert stage.name == "test_Stage"
-        assert stage_2.source == script.resolve()
+        assert stage_2.source == FileSystemSetUp.confirm_typing(
+            script, path_type="file"
+        )
         assert stage_2.name == "test_Stage2"
 
     def test_from_dict_errors(self) -> None:
