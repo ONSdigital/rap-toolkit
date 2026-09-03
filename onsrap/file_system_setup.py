@@ -847,7 +847,52 @@ class LocalFileSystem:
         raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
 
 
-# TODO: add a FileSystem for S3 when LFS one is stable
+class S3FileSystem:
+    # TODO: add FileSystem inheritance once all methods are populated
+    def __init__(self, setup: FileSystemSetUp):
+        """
+        Initialize the S3FileSystem with the provided setup.
+
+        Parameters
+        ----------
+        ``setup`` : FileSystemSetUp
+            The setup information containing the prefix, root, and workspace path.
+        """
+        self.setup = setup
+        root = setup.root
+        self.dir_path: str = (
+            (root + "/" + setup.workspace_path) if setup.workspace_path else root
+        )
+        self.data_path: str | None = (
+            (self.dir_path + "/" + setup.file_name) if setup.file_name else None
+        )
+
+    def __str__(self) -> str:
+        """
+        Return a string representation of the S3FileSystem.
+
+        Returns
+        -------
+        ``str``
+            A string representation of the S3FileSystem, including the directory
+            and data paths.
+        """
+        return (
+            f"S3 File System:\n"
+            f"Directory Path: {self.dir_path}\nData Path: {self.data_path}"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the S3FileSystem.
+
+        Returns
+        -------
+        ``str``
+            A detailed string representation of the S3FileSystem, including the
+            directory and data paths.
+        """
+        return f"S3FileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
 
 
 class FileSystemFactory:
@@ -922,3 +967,5 @@ class FileSystemFactory:
 
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
+
+# TODO: add S3 to register
