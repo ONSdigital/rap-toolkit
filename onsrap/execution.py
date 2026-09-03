@@ -187,7 +187,7 @@ class ExecutionContext:
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
-    def get_data_dir(self, path_type: str) -> str | Path | None:
+    def get_data_dir(self, path_type: str) -> str | Path:
         """
         Establishes the filepath that the data is held in.
 
@@ -202,13 +202,18 @@ class ExecutionContext:
                 return uri
             if path_type == "path":
                 path = self.config.data_dir.create_path()
+                if path is None:
+                    raise PipelineConfigurationError(
+                        f"Your run_dir {self.run_dir} cannot be converted into a Path "
+                        f"object. Please check your file system type."
+                    )
                 return path
 
         raise PipelineConfigurationError(
             "Please parse a PipelineConfig instance to the ExecutionContext."
         )
 
-    def resolve_output_root(self, path_type: str) -> str | Path | None:
+    def resolve_output_root(self, path_type: str) -> str | Path:
         """
         Establishes the filepath that the outputs are going to be saved to.
 
@@ -223,6 +228,11 @@ class ExecutionContext:
                 return uri
             if path_type == "path":
                 path = self.run_dir.create_path()
+                if path is None:
+                    raise PipelineConfigurationError(
+                        f"Your run_dir {self.run_dir} cannot be converted into a Path "
+                        f"object. Please check your file system type."
+                    )
                 return path
 
         raise PipelineConfigurationError(
