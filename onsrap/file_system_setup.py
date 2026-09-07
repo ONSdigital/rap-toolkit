@@ -8,9 +8,6 @@ from pathlib import Path, PurePosixPath
 from typing import IO, Any, Optional, Protocol, Type
 from urllib.parse import unquote, urlparse, urlsplit
 
-import boto3
-import botocore
-
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
@@ -446,12 +443,6 @@ class FileSystem(Protocol):
         self,
         path_type: str,  # dir or data
     ) -> Path: ...
-
-
-# TODO: do we need a separate protocol to cover local file systems? specific
-# interactions like creating directories, reading/writing files, etc. might
-# be different than S3 or other file systems so methods may not be worth
-# including in core protocol.
 
 
 class LocalFileSystem:
@@ -915,38 +906,9 @@ class S3FileSystem:
         ``bool``
             True if the path exists, False otherwise.
         """
-        s3 = boto3.client("s3")
-        if type == "data":
-            if not self.data_path:
-                raise ValueError(
-                    "Data path is not set. Cannot check existence of data file."
-                )
-            try:
-                s3.head_object(Bucket=self.setup.root, Key=self.data_path)
-                return True
-            except botocore.exceptions.ClientError as e:
-                error_code = e.response.get("Error", {}).get("Code", "")
-                if error_code in ("404", "NoSuchKey", "NotFound"):
-                    return False
-                else:
-                    raise
-
-        if type == "dir":
-            prefix = self.dir_path
-
-            try:
-                response = s3.list_objects_v2(
-                    Bucket=self.setup.root, Prefix=prefix, MaxKeys=1
-                )
-                return response.get("KeyCount", 0) > 0
-            except botocore.exceptions.ClientError as e:
-                error_code = e.response.get("Error", {}).get("Code", "")
-                if error_code in ("404", "NoSuchBucket", "NotFound"):
-                    return False
-                else:
-                    raise
-
-        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+        raise NotImplementedError(
+            "The 'exists' method is not implemented for S3FileSystem."
+        )
 
     def is_file(
         self,
