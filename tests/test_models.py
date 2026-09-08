@@ -284,6 +284,7 @@ class TestPipelineConfig:
             ).create_uri(),
             "allow_subprocess_fallback": True,
             "python_executable": None,
+            "spark_session": None,
             "variables": ["name", "age"],
             "num_stages": 6,
         }
