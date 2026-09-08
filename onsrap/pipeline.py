@@ -85,6 +85,8 @@ class Pipeline:
         executor: StageExecutor | PythonStageExecutor | None = None,
         spark_session: Optional[SparkSession] = None,
     ):
+        self.spark_session = spark_session
+
         (
             resolved_config,
             resolved_stage_configs,
@@ -105,6 +107,14 @@ class Pipeline:
             self.config.spark_session = spark_session
         elif self.config.spark_session is not None and spark_session is None:
             spark_session = self.config.spark_session
+        elif self.config.spark_session is not None and spark_session is not None:
+            if self.config.spark_session != spark_session:
+                warnings.warn(
+                    "SparkSession provided to Pipeline constructor does not match SparkSession in PipelineConfig."
+                    " Defaulting to SparkSession provided to Pipeline constructor.",
+                    PipelineConfigurationWarning,
+                )
+                self.spark_session = spark_session
         else:
             spark_session = None
 

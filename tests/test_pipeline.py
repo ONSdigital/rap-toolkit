@@ -895,7 +895,9 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
             + "/"
             + run_id
         )
-        mock_load_historical_run.assert_called_once_with(run_dir=expected_path)
+        mock_load_historical_run.assert_called_once_with(
+            run_dir=expected_path, spark_session=None
+        )
 
     def test_which_run_is_selected_load_latest_run(
         self, monkeypatch, pipeline_no_history: Pipeline
@@ -946,7 +948,9 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
             + "/"
             + str(run_id_1)
         )
-        mock_load_historical_run.assert_called_once_with(run_dir=expected_path)
+        mock_load_historical_run.assert_called_once_with(
+            run_dir=expected_path, spark_session=None
+        )
 
         # does not refer to run_dir in the extract_historical_run_ids list but the
         # parameter required in load_historical_run.
@@ -1319,7 +1323,8 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
             run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
-            + "/run_A"
+            + "/run_A",
+            spark_session=None,
         )
 
     def test_multiple_entries_dict_multiple_runs(
@@ -1375,13 +1380,15 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
             run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
-            + "/run_A"
+            + "/run_A",
+            spark_session=None,
         )
         mock_loader.assert_any_call(
             run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
-            + "/run_B"
+            + "/run_B",
+            spark_session=None,
         )
 
     def test_warning_if_no_run_id(
@@ -1434,7 +1441,8 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
             run_dir=FileSystemSetUp.file_system_setup_factory(
                 pipeline_no_history.run_output, path_type="dir"
             ).create_uri()
-            + "/run_B"
+            + "/run_B",
+            spark_session=None,
         )
 
     def test_None_with_stageloaderror(

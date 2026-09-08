@@ -402,7 +402,8 @@ class TestStage:
             "dependencies=('stage_1',), "
             "metadata={'info': 'example'}, "
             "entrypoint=main, "
-            "backend=python)"
+            "backend=python, "
+            "spark_session=None)"
         )
         assert repr(stage) == expected_repr
 
@@ -425,7 +426,8 @@ class TestStage:
             "    Dependencies: ('stage_1',)\n"
             "    Metadata: {'info': 'example'} \n"
             "    Entrypoint: main \n"
-            "    Backend: python"
+            "    Backend: python \n"
+            "    Spark Session: None"
         )
         assert str(stage) == expected_str
 
