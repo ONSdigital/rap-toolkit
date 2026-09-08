@@ -10,7 +10,13 @@ from urllib.parse import unquote, urlparse, urlsplit
 
 from pyspark.sql import SparkSession
 
+# identifies windows drive letters in file paths
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
+
+# identifies specific naming format for spark tables, excluding where file names are listed include their extensions.
+DB_TABLE_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*\.(?!py$|ipynb$|sql$|csv$|tsv$|parquet$|json$|yaml$|yml$|txt$|xlsx$|xls$|xlsm$|xlsb$|ods$)[A-Za-z_][A-Za-z0-9_]*$"
+)
 
 
 @dataclass
@@ -91,6 +97,15 @@ class FileSystemSetUp:
         ``FileSystemSetUp``
             The derived FileSystemSetUp object.
         """
+        if DB_TABLE_RE.match(uri):
+            if spark_session is None:
+                raise ValueError(
+                    "A SparkSession must be provided when using a database.table URI."
+                )
+            database_name, table_name = uri.split(".", 1)
+            db_file_path = cls._extract_db_fpath(spark_session, database_name)
+            uri = f"{db_file_path}/{table_name}"
+
         normalised_uri = cls._normalisation(uri)
         prefix, root, workspace_path, file_name = cls._uri_to_parts(
             normalised_uri, path_type
@@ -339,6 +354,36 @@ class FileSystemSetUp:
         file_name = None if type == "dir" else (tail[-1] if tail else None)
         workspace_path = "/".join(tail[:-1] if file_name else tail) or None
         return prefix, root, workspace_path, file_name
+
+    @staticmethod
+    def _extract_db_fpath(spark: SparkSession, db_name: str) -> str:
+        """
+        Extract the root file path of a Spark database in a URi format.
+
+        Parameters
+        ----------
+        ``spark`` : SparkSession
+            The Spark session to use for querying the database.
+        ``db_name`` : str
+            The name of the database containing the table.
+
+        Returns
+        -------
+        ``str``
+            The root file path of the specified database.
+        """
+        dbs = spark.catalog.listDatabases()
+        df = spark.createDataFrame(dbs)
+
+        # Get HDFS path to DB
+        try:
+            df = df.filter(df.name == db_name).select("locationUri")
+            db_fpath = df.collect()[0][0]
+            return db_fpath
+        except IndexError:
+            raise ValueError(
+                f"Database '{db_name}' not found in Spark catalog."
+            ) from None
 
     def create_path(self) -> Path | None:
         """
