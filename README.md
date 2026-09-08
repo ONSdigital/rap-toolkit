@@ -23,13 +23,42 @@ Reproducible Analytical Pipelines (RAPs) are a cornerstone of high quality stati
 
 For more information on the ONS RAP Minimum Standards, please see the full [standards documentation][standards].
 
+## Key Features and Capabilities
+- Build pipelines from code you already have
+Use existing Python scripts or callables as stages, so teams can adopt pipeline orchestration over already existing code rather than rewriting work.
+
+- Run stages in the right order automatically
+Define dependencies once, and the package computes a valid execution order for you using a stage graph.
+
+- Support both code-first and config-first workflows
+Create pipelines from Python definitions (for flexibility) or from structured config/dictionaries (for repeatability and easier handover).
+
+- Execute Python entrypoints cleanly, with script fallback
+Stages can run via explicit Python entrypoint functions, and plain scripts can still run through subprocess fallback when needed.
+
+- Capture run metadata for reproducibility
+Each run records key context (such as timing and configuration details) so results can be traced, repeated, and reviewed later.
+
+- Built-in logging for visibility and troubleshooting
+Centralized logs make it easier to understand what happened during a run and where a failure occurred.
+
+- Separate orchestration config from stage logic
+Pipeline-level settings (directories, runtime options, metadata) are managed independently from stage business logic, reducing coupling and making it easier to troubleshoot.
+
+- Share configuration globally or per stage
+Pass common variables across the pipeline while still allowing stage-specific values where needed.
+
+- Validate before execution
+Structural checks help catch invalid stages or dependency problems early, before compute time is wasted.
+
+- Lightweight by design
+It is intentionally small and focused: enough control for RAP standards, without the overhead of a heavyweight workflow platform.
+
 ## Getting started
 
-To start using this project, first make sure your system meets its
-requirements.
+To start using this project, first make sure your system meets its requirements.
 
-It's suggested that you install this package and its requirements within
-a virtual environment.
+It's suggested that you install this package and its requirements within a virtual environment.
 
 Stages should use a functional style. A ``stage`` can be a file or a callable item, such as a function. File stages should define an entrypoint function that runs the stage; files without an entrypoint can use subprocess fallback, but the package has less control over that execution mode.
 
@@ -37,7 +66,7 @@ There should be a parent file that sets out configuration, required directories 
 
 ## Requirements
 
-- Python 3.10 installed
+- Python 3.10+ installed
 
 Contributors have some additional requirements - please see our [contributing guidance][contributing].
 
@@ -79,6 +108,7 @@ There are 3 ways to create and run a ``Pipeline``. Whilst you can create a ``Pip
 - at least **1** stage (callable or from_file)
 
 **Pipeline.from_files()** 
+
 A ``Pipeline`` is created from stage files provided.
 ```python
 from rap-toolkit import Pipeline
@@ -92,7 +122,8 @@ pipeline.run()
 ```
 
 **Pipeline.from_config()** 
-A ``Pipeline`` is created from a configuration. This configuration can be blank and default values will be populated.
+
+A ``Pipeline`` is created from a configuration. This configuration can be blank and default values will be populated however this will have no stages and therefore require use of either the add_stage() method or adding stage locations into your configuration. Full guidance on configuration is available in our [configuration guidance][configuration_guidance].
 ```python
 from rap-toolkit import Pipeline
 
@@ -107,6 +138,7 @@ pipeline.run()
 ```
 
 **Direct Calling Pipeline()**
+
 Calling Pipeline() directly will create a default Pipeline instance with no stages, configuration, or any details. This in itself will fail if you run Pipeline.run() however you can add stages individually using the add_stage() method. 
 ```python
 Pipeline(name = None,
@@ -118,11 +150,22 @@ Pipeline(name = None,
         executor = None)
 ```
 
-The following optional extension ensures that run outputs are stored in run specific directories, preventing overwriting of outputs. This should be used when you are determining your file output locations in the ``main()`` function of your scripts.  
+The following optional extension ensures that run outputs are stored in run specific directories, preventing overwriting of outputs. This should be used when you are determining your file output locations in the ``main()`` function of your individual stage scripts. This may look something like:
 ```python
 
+#context is the ExecutionContext which is held in your Pipeline instance and parsed through to individual stages
+def main(context=None):
+    data_root = context.get_data_dir() #returns the root file path for where your data is stored
+    output_root = context.resolve_output_root() # returns the root file path for where your outputs will be stored in your run specific directories
 
+    original_data_location = Path(data_root / "og_data.xlsx")
+    final_data_location = Path(output_root/"cleaned_data_output.xlsx")
+
+    data = processing_function(original_data_location) #sends the file path for the original data to the function required
+    data.save_as_xlsx(final_data_location) #saves the final xlsx file to the defined location in a run directory
+    return "Stage Complete"
 ```
+You can also use our ``resolve_given_path()`` method to return a file path for a specific item that you are looking for which is stored in a run directory. This allows you to use outputs from previous stages in your next stage without needing to manually input the run_id.
 
 
 ### Running Your Own Pipeline
@@ -162,13 +205,14 @@ python examples/pipeline_2/main.py
 
 Alternatively, most Python IDEs allow you to run the code directly using a `run` button.
 
+## Logging and Run Directories
+This package automates logging of a pipeline through python's inbuild logging system. This creates a .log file and populates it with events throughout the Pipeline run. This records whether the overall Pipeline succeeded/failed, the individual stages succeeded/failed, any warnings that are raised throughout the Pipeline and key information at each of these events. The log directory (where the .log file is stored) can be created in any level that you request. Otherwise, it will default to being in the root directory. 
+
+The package also automates the creation of a run directory. This is a directory within your file system which holds folders for each run instantiated by the Pipeline. Each folder is unique to a run and holds the configuration for that run (if relevant) and any outputs produced as a result of this run. This prevents any overwriting occuring of the results should values change betweeen run attempts. The run directory can be created in any level that you request. Otherwise, it will default to being in the root directory. 
+
 ## Required secrets and credentials
 
 No secrets or credentials are required for running this package.
-
-## Troubleshooting
-TO BE POPULATED
-
 
 ## Project structure layout
 
