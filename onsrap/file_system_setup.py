@@ -921,7 +921,6 @@ class LocalFileSystem:
 
 
 class S3FileSystem:
-    # TODO: add FileSystem inheritance once all methods are populated
     def __init__(self, setup: FileSystemSetUp):
         """
         Initialize the S3FileSystem with the provided setup.
@@ -972,7 +971,6 @@ class S3FileSystem:
     def exists(
         self,
         type: str,  # dir or data
-        spark_session: Optional[SparkSession] = None,
     ) -> bool:
         """
         Check if the path exists in the S3 file system.
@@ -985,7 +983,7 @@ class S3FileSystem:
         ``bool``
             True if the path exists, False otherwise.
         """
-        spark = spark_session or (
+        spark = self.setup.spark_session or (
             SparkSession.builder.appName("S3FileSystemExistsCheck")
             .config(
                 "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
@@ -1032,7 +1030,7 @@ class S3FileSystem:
             return bool(exists_val)
 
         finally:
-            if spark_session is None:
+            if self.setup.spark_session is None:
                 spark.stop()
             else:
                 pass
