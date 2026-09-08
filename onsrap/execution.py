@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from pyspark.sql import SparkSession
+
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 from onsrap.warnings import StageConfigurationWarning
 
@@ -85,6 +87,7 @@ class ExecutionContext:
     variables: dict[str, Any] = field(default_factory=dict)
     active_stage_name: str | None = None
     global_config: GlobalConfig | None = None
+    spark_session: SparkSession | None = None
 
     def record(self, result: StageResult) -> StageResult:
         """
@@ -271,7 +274,6 @@ class ExecutionContext:
             return stage_config.variables
         return stage_config
 
-    # TODO: This needs to shift based on file system
     def resolve_given_path(
         self,
         stage_name: str | None,
@@ -313,7 +315,9 @@ class ExecutionContext:
         """
         result = self.result_for(stage_name) if stage_name is not None else None
         if not isinstance(root, FileSystemSetUp):
-            new_root = FileSystemSetUp.file_system_setup_factory(root, path_type="dir")
+            new_root = FileSystemSetUp.file_system_setup_factory(
+                root, path_type="dir", spark_session=self.spark_session
+            )
         else:
             new_root = root
         file_system = FileSystemFactory.create(new_root)
@@ -321,58 +325,80 @@ class ExecutionContext:
             selected_path = result.outputs.get(path_name)
             if isinstance(selected_path, (str, Path)):
                 return (
-                    FileSystemSetUp.from_any(selected_path).create_uri()
+                    FileSystemSetUp.from_any(
+                        selected_path, spark_session=self.spark_session
+                    ).create_uri()
                     if path_type == "uri"
-                    else FileSystemSetUp.from_any(selected_path).create_path()
+                    else FileSystemSetUp.from_any(
+                        selected_path, spark_session=self.spark_session
+                    ).create_path()
                 )
         if isinstance(add_folder, list):
             if file_name is not None:
                 new_path = str(file_system.join_path(*add_folder, file_name))
                 return (
-                    FileSystemSetUp.from_any(new_path).create_uri()
+                    FileSystemSetUp.from_any(
+                        new_path, spark_session=self.spark_session
+                    ).create_uri()
                     if path_type == "uri"
-                    else FileSystemSetUp.from_any(new_path).create_path()
+                    else FileSystemSetUp.from_any(
+                        new_path, spark_session=self.spark_session
+                    ).create_path()
                 )
             new_path = str(file_system.join_path(*add_folder))
             return (
-                FileSystemSetUp.from_any(new_path).create_uri()
+                FileSystemSetUp.from_any(
+                    new_path, spark_session=self.spark_session
+                ).create_uri()
                 if path_type == "uri"
-                else FileSystemSetUp.from_any(new_path).create_path()
+                else FileSystemSetUp.from_any(
+                    new_path, spark_session=self.spark_session
+                ).create_path()
             )
         if isinstance(add_folder, str):
             if file_name is not None:
                 return (
                     FileSystemSetUp.from_any(
-                        str(file_system.join_path(add_folder, file_name))
+                        str(file_system.join_path(add_folder, file_name)),
+                        spark_session=self.spark_session,
                     ).create_uri()
                     if path_type == "uri"
                     else FileSystemSetUp.from_any(
-                        str(file_system.join_path(add_folder, file_name))
+                        str(file_system.join_path(add_folder, file_name)),
+                        spark_session=self.spark_session,
                     ).create_path()
                 )
             return (
                 FileSystemSetUp.from_any(
-                    str(file_system.join_path(add_folder))
+                    str(file_system.join_path(add_folder)),
+                    spark_session=self.spark_session,
                 ).create_uri()
                 if path_type == "uri"
                 else FileSystemSetUp.from_any(
-                    str(file_system.join_path(add_folder))
+                    str(file_system.join_path(add_folder)),
+                    spark_session=self.spark_session,
                 ).create_path()
             )
         if file_name is not None:
             return (
                 FileSystemSetUp.from_any(
-                    str(file_system.join_path(file_name))
+                    str(file_system.join_path(file_name)),
+                    spark_session=self.spark_session,
                 ).create_uri()
                 if path_type == "uri"
                 else FileSystemSetUp.from_any(
-                    str(file_system.join_path(file_name))
+                    str(file_system.join_path(file_name)),
+                    spark_session=self.spark_session,
                 ).create_path()
             )
         return (
-            FileSystemSetUp.from_any(str(file_system.join_path())).create_uri()
+            FileSystemSetUp.from_any(
+                str(file_system.join_path()), spark_session=self.spark_session
+            ).create_uri()
             if path_type == "uri"
-            else FileSystemSetUp.from_any(str(file_system.join_path())).create_path()
+            else FileSystemSetUp.from_any(
+                str(file_system.join_path()), spark_session=self.spark_session
+            ).create_path()
         )
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
@@ -495,7 +521,6 @@ class PythonStageExecutor:
                 stage, context, stage.source, stage.source_label
             )
 
-        # TODO: This needs to shift based on file system
         if isinstance(stage.source, FileSystemSetUp):
             return self._execute_file(stage, context)
 
@@ -624,7 +649,9 @@ class PythonStageExecutor:
         """
 
         path = stage.source
-        path = FileSystemSetUp.file_system_setup_factory(path, path_type="file")
+        path = FileSystemSetUp.file_system_setup_factory(
+            path, path_type="file", spark_session=context.spark_session
+        )
 
         assert isinstance(path, FileSystemSetUp)
 

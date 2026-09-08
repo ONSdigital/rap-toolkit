@@ -4,6 +4,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Optional
 
+from pyspark.sql import SparkSession
+
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import StageConfigurationError, StageDependencyError
@@ -92,6 +94,7 @@ class Stage:
     metadata: dict[str, Any] = field(default_factory=dict)
     entrypoint: Optional[str] = None
     backend: str = "python"
+    spark_session: SparkSession | None = None
 
     def __post_init__(self) -> None:
         self.name = str(self.name).strip()
@@ -100,7 +103,7 @@ class Stage:
 
         if self.source is not None and not callable(self.source):
             self.source = FileSystemSetUp.file_system_setup_factory(
-                self.source, path_type="file"
+                self.source, path_type="file", spark_session=self.spark_session
             )
             if not isinstance(self.source, (FileSystemSetUp, Path, str)):
                 raise StageConfigurationError(
@@ -123,7 +126,7 @@ class Stage:
         return (
             f"    Name: {self.name}\n    Source: {self.source_label} \n"
             f"    Dependencies: {self.dependencies}\n    Metadata: {self.metadata} \n"
-            f"    Entrypoint: {self.entrypoint} \n    Backend: {self.backend}"
+            f"    Entrypoint: {self.entrypoint} \n    Backend: {self.backend} \n    Spark Session: {self.spark_session}"
         )
 
     def __repr__(self) -> str:
@@ -140,7 +143,7 @@ class Stage:
         return (
             f"Stage(name={self.name}, source={self.source_label}, "
             f"dependencies={self.dependencies}, metadata={self.metadata}, "
-            f"entrypoint={self.entrypoint}, backend={self.backend})"
+            f"entrypoint={self.entrypoint}, backend={self.backend}, spark_session={self.spark_session})"
         )
 
     @classmethod
@@ -153,6 +156,7 @@ class Stage:
         metadata: Mapping[str, Any] | None = None,
         entrypoint: str | None = None,
         backend: str = "python",
+        spark_session: SparkSession | None = None,
     ) -> Stage:
         """
         Class method that checks and cleans the file path for the ``Stage``.
@@ -184,6 +188,8 @@ class Stage:
         Stage
             Stage class instance with cleaned/checked file path, dependencies, and metadata
         """
+        if file_path.spark_session is None:
+            file_path.spark_session = spark_session
         file_system = FileSystemFactory.create(file_path)
         path = file_system.expand_user()
         if not file_system.exists(type="data"):
@@ -198,6 +204,7 @@ class Stage:
             metadata=dict(metadata or {}),
             entrypoint=entrypoint,
             backend=backend,
+            spark_session=spark_session,
         )
 
     @classmethod
@@ -209,6 +216,7 @@ class Stage:
         dependencies: Iterable[str] | str | None = None,
         metadata: Mapping[str, Any] | None = None,
         backend: str = "python",
+        spark_session: SparkSession | None = None,
     ) -> Stage:
         """
         Class method that retrieves the name of the Stage from a Callable item.
@@ -241,6 +249,7 @@ class Stage:
             dependencies=_normalize_dependencies(dependencies),
             metadata=dict(metadata or {}),
             backend=backend,
+            spark_session=spark_session,
         )
 
     @classmethod
@@ -276,6 +285,7 @@ class Stage:
         backend = payload.pop("backend", "python")
         raw_name = payload.pop("name", None)
         name = str(raw_name).strip() if raw_name is not None else None
+        spark_session = payload.pop("spark_session", None)
 
         if isinstance(metadata, Mapping):
             metadata = dict(metadata)
@@ -289,6 +299,7 @@ class Stage:
                 dependencies=dependencies,
                 metadata=metadata,
                 backend=backend,
+                spark_session=spark_session,
             )
 
         if callable(callable_source):
@@ -298,6 +309,7 @@ class Stage:
                 dependencies=dependencies,
                 metadata=metadata,
                 backend=backend,
+                spark_session=spark_session,
             )
 
         if source is not None:
@@ -308,6 +320,7 @@ class Stage:
                 metadata=metadata,
                 entrypoint=entrypoint,
                 backend=backend,
+                spark_session=spark_session,
             )
 
         raise StageConfigurationError(
@@ -391,7 +404,7 @@ class Stage:
             return self.source
         if isinstance(self.source, str):
             source_fssetup = FileSystemSetUp.file_system_setup_factory(
-                self.source, path_type="file"
+                self.source, path_type="file", spark_session=self.spark_session
             )
             return source_fssetup.create_path() if source_fssetup else None
         return None

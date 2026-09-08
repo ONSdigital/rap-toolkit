@@ -8,6 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Optional, overload
 
+from pyspark.sql import SparkSession
+
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import PipelineConfigurationError, StageConfigurationError
@@ -152,6 +154,7 @@ class PipelineConfig:
     python_executable: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
     overwrite: bool = False
+    spark_session: SparkSession | None = None
 
     def __post_init__(self) -> None:
         """
@@ -164,28 +167,38 @@ class PipelineConfig:
 
         if not isinstance(self.work_dir, FileSystemSetUp):
             self.work_dir = FileSystemSetUp.file_system_setup_factory(
-                self.work_dir, path_type="dir"
+                self.work_dir, path_type="dir", spark_session=self.spark_session
             )
+
         if self.project_root is not None and not isinstance(
             self.project_root, FileSystemSetUp
         ):
             self.project_root = FileSystemSetUp.file_system_setup_factory(
-                self.project_root, path_type="dir"
+                self.project_root, path_type="dir", spark_session=self.spark_session
             )
         if self.output_dir is not None and not isinstance(
             self.output_dir, FileSystemSetUp
         ):
             self.output_dir = FileSystemSetUp.file_system_setup_factory(
-                self.output_dir, path_type="dir"
+                self.output_dir, path_type="dir", spark_session=self.spark_session
             )
         if not isinstance(self.log_dir, FileSystemSetUp):
             self.log_dir = FileSystemSetUp.file_system_setup_factory(
-                self.log_dir, path_type="dir"
+                self.log_dir, path_type="dir", spark_session=self.spark_session
             )
         if not isinstance(self.data_dir, FileSystemSetUp):
             self.data_dir = FileSystemSetUp.file_system_setup_factory(
-                self.data_dir, path_type="dir"
+                self.data_dir, path_type="dir", spark_session=self.spark_session
             )
+
+        if self.spark_session is not None:
+            self.work_dir.spark_session = self.spark_session
+            if self.project_root is not None:
+                self.project_root.spark_session = self.spark_session
+            if self.output_dir is not None:
+                self.output_dir.spark_session = self.spark_session
+            self.log_dir.spark_session = self.spark_session
+            self.data_dir.spark_session = self.spark_session
 
     def __str__(self) -> str:
         """
@@ -203,7 +216,7 @@ class PipelineConfig:
             f"    Output Directory: {self.output_dir}\n    Log Directory: {self.log_dir}\n"
             f"    Data Directory: {self.data_dir}\n    Allow Subprocess Fallback: {self.allow_subprocess_fallback}\n"
             f"    Python Executable: {self.python_executable}\n    Overwrite: {self.overwrite}\n"
-            f"    Metadata: \n{_format_dict(self.metadata, indent=8)}"
+            f"    Metadata: \n{_format_dict(self.metadata, indent=8)}\n    Spark Session: {self.spark_session}\n"
         )
 
     def __repr__(self) -> str:
@@ -224,7 +237,7 @@ class PipelineConfig:
             f"output_dir={self.output_dir}, log_dir={self.log_dir}, data_dir={self.data_dir}, "
             f"allow_subprocess_fallback={self.allow_subprocess_fallback}, "
             f"python_executable={self.python_executable}, overwrite={self.overwrite}, "
-            f"metadata={self.metadata})"
+            f"metadata={self.metadata}, spark_session={self.spark_session})"
         )
 
     @classmethod
@@ -257,7 +270,7 @@ class PipelineConfig:
             return cls.from_mapping(dict(value))
 
         if isinstance(value, (str, Path)):
-            uri = FileSystemSetUp.from_any(value)
+            uri = FileSystemSetUp.from_any(value, spark_session=None)
             return cls.from_file(uri)
 
         raise TypeError("Unsupported pipeline config type: {0!r}".format(type(value)))
@@ -286,21 +299,28 @@ class PipelineConfig:
             metadata = {"metadata": metadata}
 
         name = payload.pop("name", None)
+        spark_session = payload.pop("spark_session", None)
 
         backend = payload.pop("backend", "python")
         stages_to_run = PipelineConfig._extract_stages_run(payload)
         work_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("work_dir", str(Path.cwd())), path_type="dir"
+            payload.pop("work_dir", str(Path.cwd())),
+            path_type="dir",
+            spark_session=spark_session,
         )
         project_root = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("project_root", None), path_type="dir"
+            payload.pop("project_root", None),
+            path_type="dir",
+            spark_session=spark_session,
         )
         output_dir_value = payload.pop("output_dir", None)
         log_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("log_dir", "logs"), path_type="dir"
+            payload.pop("log_dir", "logs"), path_type="dir", spark_session=spark_session
         )
         data_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("data_dir", "data"), path_type="dir"
+            payload.pop("data_dir", "data"),
+            path_type="dir",
+            spark_session=spark_session,
         )
 
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
@@ -337,6 +357,7 @@ class PipelineConfig:
             overwrite=overwrite,
             python_executable=python_executable,
             metadata=metadata,
+            spark_session=spark_session,
         )
 
     @classmethod
@@ -404,6 +425,7 @@ class PipelineConfig:
             "data_dir": str(self.data_dir.create_uri()),
             "allow_subprocess_fallback": self.allow_subprocess_fallback,
             "python_executable": self.python_executable,
+            "spark_session": self.spark_session,
         }
         data.update(self.metadata)
         return data

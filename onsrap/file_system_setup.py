@@ -8,6 +8,8 @@ from pathlib import Path, PurePosixPath
 from typing import IO, Any, Optional, Protocol, Type
 from urllib.parse import unquote, urlparse, urlsplit
 
+from pyspark.sql import SparkSession
+
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
@@ -44,6 +46,7 @@ class FileSystemSetUp:
     root: str = str(Path.cwd().resolve())
     workspace_path: Optional[str] = None
     file_name: Optional[str] = None
+    spark_session: Optional[SparkSession] = None
 
     def create_uri(self) -> str:
         """
@@ -65,7 +68,12 @@ class FileSystemSetUp:
         return f"{self.prefix}{root}"
 
     @classmethod
-    def from_str(cls, uri: str, path_type: str = "file"):
+    def from_str(
+        cls,
+        uri: str,
+        path_type: str = "file",
+        spark_session: Optional[SparkSession] = None,
+    ):
         """
         Derive a FileSystemSetUp object from a URI string.
 
@@ -75,6 +83,8 @@ class FileSystemSetUp:
             The URI string to parse.
         ``path_type`` : str, optional
             The type of the file system, by default "file".
+        ``spark_session`` : Optional[SparkSession], optional
+            The Spark session to use, by default None.
 
         Returns
         -------
@@ -86,11 +96,20 @@ class FileSystemSetUp:
             normalised_uri, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            spark_session=spark_session,
         )
 
     @classmethod
-    def from_path(cls, path: Path, path_type: str = "file"):
+    def from_path(
+        cls,
+        path: Path,
+        path_type: str = "file",
+        spark_session: Optional[SparkSession] = None,
+    ):
         """
         Derive a FileSystemSetUp object from a Path object.
 
@@ -111,11 +130,20 @@ class FileSystemSetUp:
             normalised_path, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            spark_session=spark_session,
         )
 
     @classmethod
-    def from_any(cls, path: Any, path_type: str = "file"):
+    def from_any(
+        cls,
+        path: Any,
+        path_type: str = "file",
+        spark_session: Optional[SparkSession] = None,
+    ):
         """
         Derive a FileSystemSetUp object from either a URI string or a Path object.
 
@@ -132,9 +160,9 @@ class FileSystemSetUp:
             The derived FileSystemSetUp object.
         """
         if isinstance(path, str):
-            return cls.from_str(path, path_type)
+            return cls.from_str(path, path_type, spark_session)
         elif isinstance(path, Path):
-            return cls.from_path(path, path_type)
+            return cls.from_path(path, path_type, spark_session)
         elif path is None:
             raise ValueError(
                 "You cannot create a FileSystemSetUp instance from a "
@@ -147,17 +175,20 @@ class FileSystemSetUp:
             )
 
     @classmethod
-    def file_system_setup_factory(cls, input: Any, path_type: str):
+    def file_system_setup_factory(
+        cls, input: Any, path_type: str, spark_session: Optional[SparkSession] = None
+    ):
         if isinstance(input, FileSystemSetUp):
             new_fs_setup = FileSystemSetUp(
                 prefix=input.prefix,
                 root=input.root,
                 workspace_path=input.workspace_path,
                 file_name=input.file_name,
+                spark_session=spark_session or input.spark_session,
             )
             return new_fs_setup
         elif isinstance(input, (str, Path)):
-            return cls.from_any(input, path_type=path_type)
+            return cls.from_any(input, path_type=path_type, spark_session=spark_session)
         else:
             raise TypeError(
                 f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
@@ -858,7 +889,9 @@ class S3FileSystem:
         self.setup = setup
         root = setup.root
         self.dir_path: str = (
-            (setup.workspace_path + "/") if setup.workspace_path else root
+            (self.setup.prefix + root + "/" + setup.workspace_path + "/")
+            if setup.workspace_path
+            else self.setup.prefix + root
         )
         self.data_path: str | None = (
             (self.dir_path + setup.file_name) if setup.file_name else None
@@ -894,6 +927,7 @@ class S3FileSystem:
     def exists(
         self,
         type: str,  # dir or data
+        spark_session: Optional[SparkSession] = None,
     ) -> bool:
         """
         Check if the path exists in the S3 file system.
@@ -906,15 +940,63 @@ class S3FileSystem:
         ``bool``
             True if the path exists, False otherwise.
         """
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+        spark = spark_session or (
+            SparkSession.builder.appName("S3FileSystemExistsCheck")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
         )
+
+        try:
+            # SparkContext exposes JVM handles as private attrs that are not in stubs.
+            sc: Any = spark.sparkContext
+            fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(f"s3a://{self.setup.root}"),
+                sc._jsc.hadoopConfiguration(),
+            )
+
+            if (self.dir_path == self.setup.root and type == "dir") or (
+                self.data_path == self.setup.root and type == "data"
+            ):
+                raise ValueError(
+                    "The directory or data path is the root of the S3 bucket. Cannot check existence of root."
+                )
+
+            if type == "dir":
+                if self.dir_path:
+                    exists_val = fs.exists(
+                        sc._jvm.org.apache.hadoop.fs.Path(self.dir_path)
+                    )
+                else:
+                    raise ValueError(
+                        "Directory path is not set. Cannot check existence of directory."
+                    )
+            elif type == "data":
+                if self.data_path:
+                    exists_val = fs.exists(
+                        sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
+                    )
+                else:
+                    raise ValueError(
+                        "Data path is not set. Cannot check existence of data file."
+                    )
+            else:
+                raise ValueError("Invalid type provided. Expected 'dir' or 'data'.")
+
+            return bool(exists_val)
+
+        finally:
+            if spark_session is None:
+                spark.stop()
+            else:
+                pass
 
     def is_file(
         self,
     ) -> bool:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'is_file' method is not implemented for S3FileSystem."
         )
 
     def is_absolute(
@@ -922,7 +1004,7 @@ class S3FileSystem:
         type: str,  # dir or data
     ) -> bool:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'is_absolute' method is not implemented for S3FileSystem."
         )
 
     def mkdir(
@@ -931,7 +1013,7 @@ class S3FileSystem:
         exist_ok: bool = True,
     ) -> None:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'mkdir' method is not implemented for S3FileSystem."
         )
 
     def read_text(
@@ -939,7 +1021,7 @@ class S3FileSystem:
         encoding: Optional[str] = "utf-8",
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'read_text' method is not implemented for S3FileSystem."
         )
 
     def open(
@@ -948,7 +1030,7 @@ class S3FileSystem:
         encoding: Optional[str] = "utf-8",
     ) -> IO:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'open' method is not implemented for S3FileSystem."
         )
 
     def glob(
@@ -956,14 +1038,14 @@ class S3FileSystem:
         specific_pattern: str,
     ) -> list[str]:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'glob' method is not implemented for S3FileSystem."
         )
 
     def expand_user(
         self,
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'expand_user' method is not implemented for S3FileSystem."
         )
 
     def resolve(
@@ -971,7 +1053,7 @@ class S3FileSystem:
         type: str,  # dir or data
     ) -> str | Path:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'resolve' method is not implemented for S3FileSystem."
         )
 
     def spec_from_file_location(
@@ -979,7 +1061,7 @@ class S3FileSystem:
         module_name: str,
     ):
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'spec_from_file_location' method is not implemented for S3FileSystem."
         )
 
     def file_handler(
@@ -988,7 +1070,7 @@ class S3FileSystem:
         encoding: str,
     ):
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'file_handler' method is not implemented for S3FileSystem."
         )
 
     def join_path(
@@ -996,14 +1078,14 @@ class S3FileSystem:
         *paths: str,
     ) -> str | Path:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'join_path' method is not implemented for S3FileSystem."
         )
 
     def suffix(
         self,
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'suffix' method is not implemented for S3FileSystem."
         )
 
     def stem(
@@ -1011,7 +1093,7 @@ class S3FileSystem:
         type: str,  # dir or data
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'stem' method is not implemented for S3FileSystem."
         )
 
     def write_text(
@@ -1020,7 +1102,7 @@ class S3FileSystem:
         encoding: str = "utf-8",
     ) -> None:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'write_text' method is not implemented for S3FileSystem."
         )
 
     def parent(
@@ -1028,7 +1110,7 @@ class S3FileSystem:
         path_type: str,  # dir or data
     ) -> Path:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'parent' method is not implemented for S3FileSystem."
         )
 
 
@@ -1078,7 +1160,11 @@ class FileSystemFactory:
 
     @classmethod
     def update_fs(
-        cls, path: str | Path | FileSystemSetUp, fs: FileSystem, path_type: str = "file"
+        cls,
+        path: str | Path | FileSystemSetUp,
+        fs: FileSystem,
+        path_type: str = "file",
+        spark_session: Optional[SparkSession] = None,
     ) -> FileSystem:
         """
         Update the file system instance with a new setup.
@@ -1097,7 +1183,9 @@ class FileSystemFactory:
         ``FileSystem``
             An updated instance of the appropriate file system class.
         """
-        setup = FileSystemSetUp.file_system_setup_factory(path, path_type=path_type)
+        setup = FileSystemSetUp.file_system_setup_factory(
+            path, path_type=path_type, spark_session=spark_session
+        )
         fs = cls.create(setup)
         return fs
 

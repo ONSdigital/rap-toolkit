@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from pyspark.sql import SparkSession
+
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import HistoricalPipelineLoadError
@@ -57,14 +59,19 @@ class Logger:
         self,
         log_dir: FileSystemSetUp | None = None,
         log_level: str = "INFO",
+        spark_session: SparkSession | None = None,
     ):
         if log_dir is None:
-            log_dir = FileSystemSetUp(workspace_path="logs")
+            log_dir = FileSystemSetUp(
+                workspace_path="logs", spark_session=spark_session
+            )
         self.config = LogConfig(log_dir=log_dir, log_level=log_level)
         self.log_dir = log_dir
 
         self.file_system = FileSystemFactory.create(self.log_dir)
         self.file_system.mkdir(parents=True, exist_ok=True)
+
+        self.spark_session = spark_session
 
         logger_name = f"{self.config.logger_name}:{self.log_dir}"
         self._logger = logging.getLogger(logger_name)
@@ -188,7 +195,9 @@ class Logger:
         """
 
         # confirms that run_root is a FileSystemSetUp instance and if not, creates it
-        run_root = FileSystemSetUp.file_system_setup_factory(run_root, path_type="dir")
+        run_root = FileSystemSetUp.file_system_setup_factory(
+            run_root, path_type="dir", spark_session=self.spark_session
+        )
 
         # ensure that logger is writing to a file and extract filepath
         if not self._logger.hasHandlers():
@@ -210,9 +219,13 @@ class Logger:
             )
 
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
-        logfile_path = FileSystemSetUp.from_any(str(logfile_path), path_type="file")
+        logfile_path = FileSystemSetUp.from_any(
+            str(logfile_path), path_type="file", spark_session=self.spark_session
+        )
 
-        new_fs = FileSystemFactory.update_fs(logfile_path, self.file_system)
+        new_fs = FileSystemFactory.update_fs(
+            logfile_path, self.file_system, spark_session=self.spark_session
+        )
 
         if not new_fs.exists(type="data"):
             raise HistoricalPipelineLoadError(
@@ -258,8 +271,12 @@ class Logger:
             timestamp = f"{parts[0]} {parts[1]}"
 
             run_dir = str(run_root.create_uri() + "/" + run_id)
-            run_dir_setup = FileSystemSetUp.from_any(run_dir, path_type="dir")
-            run_dir_fs = FileSystemFactory.update_fs(run_dir_setup, self.file_system)
+            run_dir_setup = FileSystemSetUp.from_any(
+                run_dir, path_type="dir", spark_session=self.spark_session
+            )
+            run_dir_fs = FileSystemFactory.update_fs(
+                run_dir_setup, self.file_system, spark_session=self.spark_session
+            )
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")
