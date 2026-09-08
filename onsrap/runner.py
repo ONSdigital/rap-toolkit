@@ -94,7 +94,7 @@ class PipelineRunner:
         pipeline.id = runtime_id
         # copies the FileSystemSetUp in run_output to a new variable
         run_dir_set_up = FileSystemSetUp.file_system_setup_factory(
-            pipeline.run_output, path_type="dir"
+            pipeline.run_output, path_type="dir", spark_session=pipeline.spark_session
         )
         # changes the workspace path within the copied FileSystemSetUp to include the runtime_id
         run_dir_set_up.workspace_path = (
@@ -116,6 +116,7 @@ class PipelineRunner:
             working_directory=pipeline.config.work_dir,
             stage_configs=dict(pipeline.stage_configs),
             global_config=pipeline.global_config,
+            spark_session=pipeline.spark_session,
         )
 
         # Ensure the stages are in order and create a manifest that explains the run.
@@ -254,6 +255,8 @@ def main(argv: list[str] | None = None) -> int:
     from .pipeline import Pipeline
 
     args = build_parser().parse_args(argv)
+    # TODO: this may need an interface for spark_session to be passed in from the command line. Not sure
+    # how to go about this.
     pipeline = Pipeline.from_files(args.stages, name=args.name)
     pipeline.run()
     return 0
@@ -281,7 +284,7 @@ def _log_pipeline_attributes(
         state information.
     """
     attributes_file = FileSystemSetUp.file_system_setup_factory(
-        run_dir, path_type="dir"
+        run_dir, path_type="dir", spark_session=context.spark_session
     )
     attributes_file.file_name = (
         f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
@@ -318,6 +321,7 @@ def _log_config(
         root=run_dir.root,
         workspace_path=run_dir.workspace_path,
         file_name=run_dir.file_name,
+        spark_session=context.spark_session,
     )
     config_file.file_name = (
         f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"

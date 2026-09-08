@@ -8,6 +8,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from pyspark.sql import SparkSession
+
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import StageConfigurationError, StageLoadError
@@ -179,16 +181,27 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     return module
 
 
-def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
+def load_historical_run(
+    run_dir: str | Path | FileSystemSetUp, spark_session: SparkSession | None = None
+) -> PipelineRun:
     """
     Load a previously executed pipeline run from a YAML file.
+
+    Parameters
+    ----------
+    ``run_dir`` : str | Path | FileSystemSetUp
+        The directory containing the historical run's YAML file.
+    ``spark_session`` : SparkSession | None
+        Optional SparkSession to be used for file system operations.
 
     Returns
     -------
     ``PipelineRun``
         An instance of ``PipelineRun`` representing the historical run.
     """
-    run_dir_setup = FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir")
+    run_dir_setup = FileSystemSetUp.file_system_setup_factory(
+        run_dir, path_type="dir", spark_session=spark_session
+    )
     file_system = FileSystemFactory.create(run_dir_setup)
 
     search_path = "pipeline_attributes_for_*.yaml"
@@ -199,13 +212,17 @@ def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
             "Historical run file does not exist in: {0}".format(run_dir)
         )
     # updates file path with searched full data file
-    file_path = FileSystemSetUp.from_any(files[0])
+    file_path = FileSystemSetUp.from_any(files[0], spark_session=spark_session)
     # creates FileSystem from FileSystemSetUp
-    update_fs = FileSystemFactory.update_fs(file_path, file_system)
+    update_fs = FileSystemFactory.update_fs(
+        file_path, file_system, spark_session=spark_session
+    )
     # resolves file path to ensure full path is available
     updated_file_path = update_fs.resolve(type="data")
     # updates file system instance with full file path to ensure file can be opened
-    update_fs = FileSystemFactory.update_fs(updated_file_path, file_system)
+    update_fs = FileSystemFactory.update_fs(
+        updated_file_path, file_system, spark_session=spark_session
+    )
 
     import yaml
 

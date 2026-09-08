@@ -9,7 +9,9 @@ import warnings
 from contextlib import suppress
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
+
+from pyspark.sql import SparkSession
 
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 
@@ -81,6 +83,7 @@ class Pipeline:
         dependencies: Mapping[str, Sequence[str]] | None = None,
         logger: Logger | None = None,
         executor: StageExecutor | PythonStageExecutor | None = None,
+        spark_session: Optional[SparkSession] = None,
     ):
         (
             resolved_config,
@@ -97,12 +100,20 @@ class Pipeline:
             )
 
         self.config = resolved_config
+
+        if self.config.spark_session is None and spark_session is not None:
+            self.config.spark_session = spark_session
+        elif self.config.spark_session is not None and spark_session is None:
+            spark_session = self.config.spark_session
+        else:
+            spark_session = None
+
         if self.config.name is None:
             self.config.name = self.name
 
         self.logger = logger or Logger(
             log_dir=FileSystemSetUp.file_system_setup_factory(
-                self.config.log_dir, path_type="dir"
+                self.config.log_dir, path_type="dir", spark_session=spark_session
             )
         )
 
@@ -124,6 +135,8 @@ class Pipeline:
         self.dependencies = None
         if dependencies is not None:
             self.dependencies = self._assign_dependencies(dependencies, self.stages)
+
+        self.spark_session = spark_session
 
         self.stage_configs = dict(resolved_stage_configs)
         self.global_config = resolved_global_config
@@ -169,6 +182,7 @@ class Pipeline:
             f"Dependencies:\n     {self.dependencies} \n\nLogger:\n     {self.logger} \n\n"
             f"Executor:\n     {self.executor} \n\nGraph:\n     {graph} \n\n"
             f"ID:\n     {self.id} \n\nManifest:\n     {self.manifest} \n\nLast Run:\n     {self.last_run}\n"
+            f"Spark Session:\n     {self.spark_session}\n"
         )
 
     def __repr__(self) -> str:
@@ -186,7 +200,7 @@ class Pipeline:
             f"Pipeline(name={self.name}, backend={self.backend}, "
             f"stages={self.stages}, dependencies={self.dependencies}, "
             f"logger={self.logger}, executor={self.executor}, graph={self.graph}, "
-            f"id={self.id}, manifest={self.manifest}, last_run={self.last_run})"
+            f"id={self.id}, manifest={self.manifest}, last_run={self.last_run}, spark_session={self.spark_session})"
         )
 
     def add_stage(
@@ -630,12 +644,14 @@ class Pipeline:
         try:
             latest_run = (
                 FileSystemSetUp.file_system_setup_factory(
-                    self.run_output, path_type="dir"
+                    self.run_output, path_type="dir", spark_session=self.spark_session
                 ).create_uri()
                 + "/"
                 + str(latest_run_id)
             )
-            return load_historical_run(run_dir=latest_run)
+            return load_historical_run(
+                run_dir=latest_run, spark_session=self.spark_session
+            )
         except StageLoadError:
             warnings.warn(
                 "Historical run file does not exist. Last_run attribute will be None.",
@@ -686,10 +702,13 @@ class Pipeline:
             try:
                 all_runs[run_id] = load_historical_run(
                     run_dir=FileSystemSetUp.file_system_setup_factory(
-                        self.run_output, path_type="dir"
+                        self.run_output,
+                        path_type="dir",
+                        spark_session=self.spark_session,
                     ).create_uri()
                     + "/"
-                    + str(run_id)
+                    + str(run_id),
+                    spark_session=self.spark_session,
                 )
             except StageLoadError:
                 warnings.warn(
@@ -716,7 +735,9 @@ class Pipeline:
         """
         if self.config.output_dir is not None:
             run_output = FileSystemSetUp.file_system_setup_factory(
-                self.config.output_dir, path_type="dir"
+                self.config.output_dir,
+                path_type="dir",
+                spark_session=self.spark_session,
             )
         else:
             warnings.warn(
@@ -724,14 +745,18 @@ class Pipeline:
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
             run_output = FileSystemSetUp.file_system_setup_factory(
-                self.config.project_root or self.config.work_dir, path_type="dir"
+                self.config.project_root or self.config.work_dir,
+                path_type="dir",
+                spark_session=self.spark_session,
             )
 
         if run_output.workspace_path is None:
             run_output.workspace_path = "/runs"
         else:
             run_output.workspace_path = run_output.workspace_path + "/runs"
-        return FileSystemSetUp.file_system_setup_factory(run_output, path_type="dir")
+        return FileSystemSetUp.file_system_setup_factory(
+            run_output, path_type="dir", spark_session=self.spark_session
+        )
 
     def _coerce_stage(
         self,
@@ -769,10 +794,18 @@ class Pipeline:
             return Stage.from_callable(stage)
 
         if isinstance(stage, Path):
-            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", spark_session=self.spark_session
+                )
+            )
 
         if isinstance(stage, str):
-            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", spark_session=self.spark_session
+                )
+            )
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -1174,16 +1207,20 @@ class Pipeline:
                     continue
 
                 output_path = str(output_dir)
-                output_path_fs_setup = FileSystemSetUp.from_any(output_path)
+                output_path_fs_setup = FileSystemSetUp.from_any(
+                    output_path, spark_session=self.spark_session
+                )
                 output_path_file_system = FileSystemFactory.create(output_path_fs_setup)
                 if not output_path_file_system.is_absolute("dir"):
                     output_path = str(self.config.work_dir) + "/" + output_path
-                    output_path_fs_setup = FileSystemSetUp.from_any(output_path)
+                    output_path_fs_setup = FileSystemSetUp.from_any(
+                        output_path, spark_session=self.spark_session
+                    )
                     output_path_file_system = FileSystemFactory.create(
                         output_path_fs_setup
                     )
 
-                exists = output_path_file_system.exists("dir")
+                exists = output_path_file_system.exists(type="dir")
                 overwrite = bool(self.config.overwrite)
 
                 if exists and not overwrite:
@@ -1326,13 +1363,20 @@ class Pipeline:
         metadata.update(stage_options)
 
         source = self._resolve_stage_source(
-            stage_name=str(stage_name), location=location, work_dir=work_dir
+            stage_name=str(stage_name),
+            location=location,
+            work_dir=work_dir,
+            spark_session=self.spark_session,
         )
         if isinstance(source, Path):
-            source = FileSystemSetUp.from_path(source, path_type="file")
+            source = FileSystemSetUp.from_path(
+                source, path_type="file", spark_session=self.spark_session
+            )
 
         if isinstance(source, str):
-            source = FileSystemSetUp.from_str(source, path_type="file")
+            source = FileSystemSetUp.from_str(
+                source, path_type="file", spark_session=self.spark_session
+            )
 
         if not source:
             raise StageConfigurationError(
@@ -1502,6 +1546,7 @@ class Pipeline:
     def from_files(
         cls,
         file_paths: Iterable[str | Path],
+        spark_session: SparkSession | None = None,
         *,
         name: str | None = None,
         backend: str = "python",
@@ -1524,6 +1569,8 @@ class Pipeline:
         ``backend`` : str, default = "python"
             The system that the pipeline is written in.
         ``config`` : PipelineConfig | Mapping[str, Any] | str | Path | None
+        ``spark_session`` : SparkSession | None
+            The Spark session to use for this Pipeline run.
             The high level information required to run this specific pipeline.
         ``dependencies`` : Mapping[str, Sequence[str]] or None
             An object containing which stages are required to be run before other stages.
@@ -1539,9 +1586,11 @@ class Pipeline:
         stages: list[Stage] = []
         for file_path in file_paths:
             if isinstance(file_path, str):
-                path = FileSystemSetUp.from_str(file_path)
+                path = FileSystemSetUp.from_str(file_path, spark_session=spark_session)
             elif isinstance(file_path, Path):
-                path = FileSystemSetUp.from_path(file_path, path_type="file")
+                path = FileSystemSetUp.from_path(
+                    file_path, path_type="file", spark_session=spark_session
+                )
             else:
                 raise PipelineConfigurationError(
                     f"File should be a string or a Path object. Yours is {type(file_path)}"
@@ -1567,6 +1616,7 @@ class Pipeline:
             stages=stages,
             logger=logger,
             executor=executor,
+            spark_session=spark_session,
         )
 
     @classmethod
@@ -1577,6 +1627,7 @@ class Pipeline:
         backend: str = "python",
         logger: Logger | None = None,
         executor: StageExecutor | None = None,
+        spark_session: SparkSession | None = None,
     ) -> Pipeline:
         """
         Extracts information from a dictionary to configure a Pipeline instance as
@@ -1609,6 +1660,7 @@ class Pipeline:
             stages=None,
             logger=logger,
             executor=executor,
+            spark_session=spark_session,
         )
 
     @classmethod
@@ -1619,6 +1671,7 @@ class Pipeline:
         backend: str = "python",
         logger: Logger | None = None,
         executor: StageExecutor | None = None,
+        spark_session: SparkSession | None = None,
     ) -> Pipeline:
         """
         Construct a pipeline directly from a composite configuration payload or file.
@@ -1626,7 +1679,9 @@ class Pipeline:
         This is the preferred entrypoint when configuration defines both pipeline-level
         settings and the stage-level configuration that should be injected at runtime.
         """
-        extracted_config = Pipeline._load_config_mapping(config)
+        extracted_config = Pipeline._load_config_mapping(
+            config, spark_session=spark_session
+        )
 
         return cls.from_dict(
             config=extracted_config,
@@ -1634,6 +1689,7 @@ class Pipeline:
             backend=backend,
             logger=logger,
             executor=executor,
+            spark_session=spark_session,
         )
 
     @staticmethod
@@ -1664,6 +1720,7 @@ class Pipeline:
     @staticmethod
     def _load_config_mapping(
         config: Mapping[str, Any] | str | Path,
+        spark_session: SparkSession | None = None,
     ) -> dict[str, Any]:
         """
         Load raw configuration data from a mapping or YAML file.
@@ -1671,7 +1728,7 @@ class Pipeline:
         if isinstance(config, Mapping):
             return dict(config)
 
-        config_fs_setup = FileSystemSetUp.from_any(config)
+        config_fs_setup = FileSystemSetUp.from_any(config, spark_session=spark_session)
         config_file_system = FileSystemFactory.create(config_fs_setup)
         config_path = config_file_system.expand_user()
         if config_file_system.suffix().lower() not in ACCEPTED_CONFIG_TYPES:
@@ -1945,7 +2002,10 @@ class Pipeline:
 
     @staticmethod
     def _resolve_stage_source(
-        stage_name: str, location: Any, work_dir: FileSystemSetUp
+        stage_name: str,
+        location: Any,
+        work_dir: FileSystemSetUp,
+        spark_session: SparkSession | None = None,
     ) -> FileSystemSetUp | Path | str | None:
         """
         Resolve the source path for a configured stage.
@@ -1957,16 +2017,20 @@ class Pipeline:
             file_system_work_dir = FileSystemFactory.create(work_dir)
             return str(file_system_work_dir.dir_path) + "/scripts/" + f"{stage_name}.py"
 
-        candidate_fs_setup = FileSystemSetUp.from_any(location, path_type="file")
+        candidate_fs_setup = FileSystemSetUp.from_any(
+            location, path_type="file", spark_session=spark_session
+        )
         candidate_fs = FileSystemFactory.create(candidate_fs_setup)
         candidate = candidate_fs.expand_user()
-        candidate_fs = FileSystemFactory.update_fs(candidate, candidate_fs)
+        candidate_fs = FileSystemFactory.update_fs(
+            candidate, candidate_fs, spark_session=spark_session
+        )
         if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
             return candidate_fs.data_path
 
         work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
         work_dir_candidate_fs_setup = FileSystemSetUp.file_system_setup_factory(
-            work_dir_candidate, path_type="file"
+            work_dir_candidate, path_type="file", spark_session=spark_session
         )
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
         if work_dir_candidate_fs.exists(type="data"):
