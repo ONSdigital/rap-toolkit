@@ -31,7 +31,7 @@ def standardise_columns(df):
     return df
 
 
-def main(context=None):
+def main(context):
     # Load stage configuration
     config = context.get_stage_config("0_clean_data")
 
