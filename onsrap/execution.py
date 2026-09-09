@@ -224,6 +224,7 @@ class ExecutionContext:
                         f"object. It returns {path} Please check your file system type."
                     )
                 return path
+            raise ValueError("path_type must be path or uri")
 
         raise PipelineConfigurationError(
             "Please parse a run directory to the ExecutionContext."
