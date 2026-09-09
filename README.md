@@ -220,87 +220,47 @@ The ``rap-toolkit`` repository has the following structure:
 
 ```shell
 .
-├── onsrap/
-│   ├── data/
-│   │   ├── raw/
-│   │   ├── interim/
-│   │   └── processed/
-│   ├── onsrap/
-│   │   ├── example_modules/
-│   │   │   ├── __init__.py
-│   │   │   └── example_module.py
-│   │   ├── __init__.py
-│   │   ├── errors.py
-│   │   ├── execution.py
-│   │   ├── graph.py
-│   │   ├── loader.py
-│   │   ├── models.py
-│   │   ├── pipeline.py
-│   │   ├── py.typed
-│   │   ├── run_pipeline.py
-│   │   ├── runner.py
-│   │   ├── stage.py
-│   │   └── warnings.py
-│   ├── examples/
-│   │   ├── pipeline_1/
-│   │   │   ├── data/
-│   │   │   │   └── orders.csv
-│   │   │   ├── runs/
-│   │   │   │   └── README.md
-│   │   │   └── scripts/
-│   │   │   │   ├── 0_data_validation.py
-│   │   │   │   ├── 1_preprocessing.py
-│   │   │   │   └── 2_reporting.py
-│   │   │   ├── Example.md
-│   │   │   ├── main.py
-│   │   │   └── main2.py
-│   │   ├── pipeline_2/
-│   │   │   ├── data/
-│   │   │   │   ├── orders_cleaned.csv
-│   │   │   │   ├── orders_prepped.csv
-│   │   │   │   └── orders.csv
-│   │   │   ├── outputs/
-│   │   │   │   ├── runs/
-│   │   │   │   └── order_analysis.md
-│   │   │   └── scripts/
-│   │   │   │   ├── 0_clean_data.py
-│   │   │   │   ├── 1_derive_vars.py
-│   │   │   │   └── 2_reporting.py
-│   │   │   ├── conf.yaml
-│   │   │   ├── Example.md
-│   │   │   └── main.py
-│   │   └── pipeline_3/
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── repo_tests_README.md
-│   │   ├── test_execution.py
-│   │   ├── test_loader.py
-│   │   ├── test_logger.py
-│   │   ├── test_models.py
-│   │   ├── test_pipeline_architecture.py
-│   │   ├── test_pipeline.py
-│   │   ├── test_runner.py
-│   │   └── test_stage.py
-│   ├── .env
-│   ├── .envrc
-│   ├── .gitignore
-│   ├── .pre-commit-config.yaml
-│   ├── .secrets.baseline
-│   ├── CHANGELOG.md
-│   ├── cliff.toml
-│   ├── CODE_OF_CONDUCT.md
-│   ├── configuration.md
-│   ├── conftest.py
-│   ├── CONTRIBUTING.md
-│   ├── DESIGN.md
-│   ├── LICENSE
-│   ├── make.bat
-│   ├── Makefile
-│   ├── pyproject.toml
-│   ├── README.md
-│   ├── setup.cfg
-│   └── setup.py
-└── 
+├── onsrap/                     # Core package code
+│   ├── __init__.py
+│   ├── errors.py
+│   ├── execution.py
+│   ├── graph.py
+│   ├── loader.py
+│   ├── models.py
+│   ├── pipeline.py
+│   ├── py.typed
+│   ├── run_pipeline.py
+│   ├── runner.py
+│   ├── stage.py
+│   └── warnings.py
+├── examples/                   # Example pipelines
+│   ├── pipeline_1/             # Example: Python-based configuration
+│   │   ├── data/
+│   │   ├── runs/
+│   │   └── scripts/
+│   │   ├── main.py
+│   ├── pipeline_2/             # Example: YAML-based configuration 
+│   │   ├── data/
+│   │   ├── outputs/
+│   │   ├── scripts/
+│   │   ├── conf.yaml
+│   │   └── main.py
+│   └── pipeline_3/ 
+├── docs/                       # Documentation
+│   │   ├── contributor_guide/
+│   │   ├── user_guide/
+│   │   └── api/
+├── tests/                      # Test Suite
+├── CHANGELOG.md
+├── cliff.toml
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── DESIGN.md
+├── LICENSE
+├── pyproject.toml
+├── README.md
+└── setup.py
+
 ```
 
 ## Licence
@@ -323,4 +283,4 @@ This project structure is based on the [`govcookiecutter` template project][govc
 [docs-loading-environment-variables]: https://github.com/best-practice-and-impact/govcookiecutter/blob/main/%7B%7B%20cookiecutter.repo_name%20%7D%7D/docs/user_guide/loading_environment_variables.md
 [docs-loading-environment-variables-secrets]: https://github.com/best-practice-and-impact/govcookiecutter/blob/main/%7B%7B%20cookiecutter.repo_name%20%7D%7D/docs/user_guide/loading_environment_variables.md#storing-secrets-and-credentials
 [standards]: https://best-practice-and-impact.github.io/ONS_minimum_RAP/
-[configuration_guidance]: docs\configuration_guidance.md
+[configuration_guidance]: docs\user_guide\configuration_guidance.md
