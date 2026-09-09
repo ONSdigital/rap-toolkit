@@ -122,7 +122,7 @@ class Logger:
             A string representation of the ``Logger`` class with its attributes.
         """
         return (
-            f"Log Directory: {self.file_system.resolve(type='dir')}\n"
+            f"Log Directory: {self.file_system.resolve(path_type='dir')}\n"
             f"     Log Level: {self.config.log_level}"
         )
 
@@ -137,7 +137,7 @@ class Logger:
         str
             A string representation of the ``Logger`` class with its attributes.
         """
-        return f"Logger(log_dir={self.file_system.resolve(type='dir')}, log_level={self.config.log_level})"
+        return f"Logger(log_dir={self.file_system.resolve(path_type='dir')}, log_level={self.config.log_level})"
 
     def event(self, message: str, **kwargs: Any) -> None:
         """
@@ -227,7 +227,7 @@ class Logger:
             logfile_path, self.file_system, spark_session=self.spark_session
         )
 
-        if not new_fs.exists(type="data"):
+        if not new_fs.exists(path_type="data"):
             raise HistoricalPipelineLoadError(
                 "The log file does not exist at this location."
             )
@@ -280,7 +280,7 @@ class Logger:
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")
-            if run_dir_fs.exists(type="dir") and log_name == name:
+            if run_dir_fs.exists(path_type="dir") and log_name == name:
                 matches.append(
                     {
                         "run_id": run_id,

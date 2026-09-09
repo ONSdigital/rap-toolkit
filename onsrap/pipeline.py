@@ -1230,7 +1230,7 @@ class Pipeline:
                         output_path_fs_setup
                     )
 
-                exists = output_path_file_system.exists(type="dir")
+                exists = output_path_file_system.exists(path_type="dir")
                 overwrite = bool(self.config.overwrite)
 
                 if exists and not overwrite:
@@ -1606,7 +1606,7 @@ class Pipeline:
                     f"File should be a string or a Path object. Yours is {type(file_path)}"
                 )
             fs = FileSystemFactory.create(path)
-            stage_name = fs.stem(type="data")
+            stage_name = fs.stem(path_type="data")
             stage_dependencies = cls._dependencies_for_stage(
                 stage_name, path, dependencies
             )
@@ -1745,7 +1745,7 @@ class Pipeline:
             raise StageConfigurationError(
                 f"Unsupported config file format parsed as Stage Configuration: {config!r}."
             )
-        if not config_file_system.exists(type="data"):
+        if not config_file_system.exists(path_type="data"):
             raise FileNotFoundError(f"Config file does not exist: {config_path}")
 
         import yaml
@@ -2035,7 +2035,9 @@ class Pipeline:
         candidate_fs = FileSystemFactory.update_fs(
             candidate, candidate_fs, spark_session=spark_session
         )
-        if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
+        if candidate_fs.is_absolute(path_type="data") or candidate_fs.exists(
+            path_type="data"
+        ):
             return candidate_fs.data_path
 
         work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
@@ -2043,7 +2045,7 @@ class Pipeline:
             work_dir_candidate, path_type="file", spark_session=spark_session
         )
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
-        if work_dir_candidate_fs.exists(type="data"):
+        if work_dir_candidate_fs.exists(path_type="data"):
             return work_dir_candidate
 
         return candidate

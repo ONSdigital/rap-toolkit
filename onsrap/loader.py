@@ -51,7 +51,7 @@ def discover_python_entrypoint(
     """
 
     file_system = FileSystemFactory.create(path)
-    if not file_system.exists(type="data"):
+    if not file_system.exists(path_type="data"):
         raise StageConfigurationError(
             "Stage source file does not exist in the data path: {0}".format(file_system)
         )
@@ -150,7 +150,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
         raise StageLoadError(
             "No file name has been provided for the stage: {0}".format(file_system)
         )
-    if not file_system.exists(type="data"):
+    if not file_system.exists(path_type="data"):
         raise StageLoadError(
             "Stage source file does not exist in the data path: {0}".format(file_system)
         )
@@ -158,7 +158,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     module_name = "onsrap_stage_{0}_{1}".format(
         Path(path.file_name).stem,
         hashlib.sha256(
-            str(file_system.resolve(type="data")).encode("utf-8")
+            str(file_system.resolve(path_type="data")).encode("utf-8")
         ).hexdigest()[:12],
     )
     spec = file_system.spec_from_file_location(module_name)
@@ -218,7 +218,7 @@ def load_historical_run(
         file_path, file_system, spark_session=spark_session
     )
     # resolves file path to ensure full path is available
-    updated_file_path = update_fs.resolve(type="data")
+    updated_file_path = update_fs.resolve(path_type="data")
     # updates file system instance with full file path to ensure file can be opened
     update_fs = FileSystemFactory.update_fs(
         updated_file_path, file_system, spark_session=spark_session

@@ -441,7 +441,7 @@ class FileSystem(Protocol):
 
     def exists(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool: ...
 
     def is_file(
@@ -450,7 +450,7 @@ class FileSystem(Protocol):
 
     def is_absolute(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool: ...
 
     def mkdir(
@@ -481,7 +481,7 @@ class FileSystem(Protocol):
 
     def resolve(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> str | Path: ...
 
     def spec_from_file_location(
@@ -506,7 +506,7 @@ class FileSystem(Protocol):
 
     def stem(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> str: ...
 
     def write_text(
@@ -579,7 +579,7 @@ class LocalFileSystem:
 
     def exists(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool:
         """
         Check if the path exists in the local file system.
@@ -594,11 +594,11 @@ class LocalFileSystem:
         Raises
         ------
         ValueError
-            If the type specified is not 'dir' or 'data'.
+            If the path_type specified is not 'dir' or 'data'.
         """
-        if type == "dir":
+        if path_type == "dir":
             return self.dir_path.exists()
-        elif type == "data":
+        elif path_type == "data":
             if self.data_path:
                 return self.data_path.exists()
             else:
@@ -606,7 +606,7 @@ class LocalFileSystem:
                     "Data path is not set. Cannot check existence of data file."
                 )
         else:
-            raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def is_file(
         self,
@@ -627,7 +627,7 @@ class LocalFileSystem:
 
     def is_absolute(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool:
         """
         Checks if the path is an absolute path in the local file system.
@@ -638,9 +638,9 @@ class LocalFileSystem:
         ``bool``
             True if the path is absolute, False otherwise.
         """
-        if type == "dir":
+        if path_type == "dir":
             return self.dir_path.is_absolute()
-        elif type == "data":
+        elif path_type == "data":
             if self.data_path:
                 return self.data_path.is_absolute()
             else:
@@ -648,7 +648,7 @@ class LocalFileSystem:
                     "Data path is not set. Cannot check if it is absolute."
                 )
         else:
-            raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,
@@ -754,14 +754,14 @@ class LocalFileSystem:
 
     def resolve(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> Path:
         """
         Resolves the filepath to an absolute path.
 
         Parameters
         ----------
-        ``type`` : str
+        ``path_type`` : str
             The type of path to resolve. Should be either 'dir' for the directory path
             or 'data' for the data file path.
 
@@ -773,17 +773,17 @@ class LocalFileSystem:
         Raises
         ------
         ``ValueError``
-            If the type specified is not 'dir' or 'data'.
+            If the path_type specified is not 'dir' or 'data'.
         """
-        if type == "dir":
+        if path_type == "dir":
             return self.dir_path.resolve()
-        elif type == "data":
+        elif path_type == "data":
             if self.data_path:
                 return self.data_path.resolve()
             else:
                 raise ValueError("Data path is not set. Cannot resolve data path.")
         else:
-            raise ValueError("Invalid type. Expected 'dir' or 'data'.")
+            raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
@@ -856,7 +856,7 @@ class LocalFileSystem:
         """
         return self.data_path.suffix if self.data_path else ""
 
-    def stem(self, type: str) -> str:
+    def stem(self, path_type: str) -> str:
         """
         Returns the stem of the path, which is the final component of the path without
         its suffix.
@@ -864,15 +864,15 @@ class LocalFileSystem:
         Returns
         -------
         ``str``
-            The stem of the path corresponding to the specified type ('dir' or 'data'),
+            The stem of the path corresponding to the specified path_type ('dir' or 'data'),
             or an empty string if the path is not set.
         """
-        if type == "dir":
+        if path_type == "dir":
             return self.dir_path.stem if self.dir_path else ""
-        elif type == "data":
+        elif path_type == "data":
             return self.data_path.stem if self.data_path else ""
         else:
-            raise ValueError("Invalid type. Expected 'dir' or 'data'.")
+            raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
 
     def write_text(
         self,
@@ -970,7 +970,7 @@ class S3FileSystem:
 
     def exists(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool:
         """
         Check if the path exists in the S3 file system.
@@ -999,15 +999,15 @@ class S3FileSystem:
                 sc._jsc.hadoopConfiguration(),
             )
 
-            if (self.dir_path == self.setup.root and type == "dir") or (
-                self.data_path == self.setup.root and type == "data"
+            if (self.dir_path == self.setup.root and path_type == "dir") or (
+                self.data_path == self.setup.root and path_type == "data"
             ):
                 raise ValueError(
                     "The directory or data path is the S3 bucket. Cannot check "
                     "existence of the bucket."
                 )
 
-            if type == "dir":
+            if path_type == "dir":
                 if self.dir_path:
                     exists_val = fs.exists(
                         sc._jvm.org.apache.hadoop.fs.Path(self.dir_path)
@@ -1016,7 +1016,7 @@ class S3FileSystem:
                     raise ValueError(
                         "Directory path is not set. Cannot check existence of directory."
                     )
-            elif type == "data":
+            elif path_type == "data":
                 if self.data_path:
                     exists_val = fs.exists(
                         sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
@@ -1026,7 +1026,9 @@ class S3FileSystem:
                         "Data path is not set. Cannot check existence of data file."
                     )
             else:
-                raise ValueError("Invalid type provided. Expected 'dir' or 'data'.")
+                raise ValueError(
+                    "Invalid path_type provided. Expected 'dir' or 'data'."
+                )
 
             return bool(exists_val)
 
@@ -1059,7 +1061,7 @@ class S3FileSystem:
             bucket as the isFile() method cannot be used on the bucket.
         """
         spark = self.setup.spark_session or (
-            SparkSession.builder.appName("S3FileSystemExistsCheck")
+            SparkSession.builder.appName("S3FileSystemIsFileCheck")
             .config(
                 "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
             )
@@ -1098,11 +1100,24 @@ class S3FileSystem:
 
     def is_absolute(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> bool:
-        raise NotImplementedError(
-            "The 'is_absolute' method is not implemented for S3FileSystem."
-        )
+        """
+        Absolute paths do not exist in S3 as the file structure is flat therefore this
+        checks that the path is not the bucket itself and therefore a valid path to a
+        directory or file.
+
+        Returns
+        -------
+        ``bool``
+            True if the path is valid, False otherwise.
+        """
+        if path_type == "dir":
+            return bool(self.dir_path and self.dir_path != self.setup.root)
+        elif path_type == "data":
+            return bool(self.data_path and self.data_path != self.setup.root)
+        else:
+            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,
@@ -1147,7 +1162,7 @@ class S3FileSystem:
 
     def resolve(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> str | Path:
         raise NotImplementedError(
             "The 'resolve' method is not implemented for S3FileSystem."
@@ -1187,7 +1202,7 @@ class S3FileSystem:
 
     def stem(
         self,
-        type: str,  # dir or data
+        path_type: str,  # dir or data
     ) -> str:
         raise NotImplementedError(
             "The 'stem' method is not implemented for S3FileSystem."
