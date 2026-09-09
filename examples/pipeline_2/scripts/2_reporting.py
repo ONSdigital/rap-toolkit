@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pandas as pd
 
 
@@ -116,20 +114,27 @@ def curate_report(report, values):
     )
 
 
-def write_report(report):
-    report_file = Path("examples/pipeline_2/outputs/order_analysis.md")
+def write_report(report, output_path):
+    report_file = output_path
 
     report_file.write_text("\n".join(report), encoding="utf-8")
 
 
-def main():
-    orders = pd.read_csv("examples/pipeline_2/data/orders_prepped.csv")
+def main(context=None):
+    # Read in processed data from stage "1_derive_vars"
+    data_loc = context.resolve_given_path(
+        "1_derive_vars", "output_location", "orders_prepped.csv", context.get_data_dir()
+    )
+    orders = pd.read_csv(data_loc)
 
+    # Set empty list and dictionary to store report and values
     report = []
     values = {}
 
+    # Set the number format for the report to 2 decimal places
     num_format = "{:.2f}"
 
+    # Run functions required for the stage
     per_region_profits(orders, values, num_format)
     per_region_quantity(orders, values)
     orders_per_day(orders, values)
@@ -138,7 +143,16 @@ def main():
     total_summaries(orders, values, num_format)
     profit_per_product(orders, values, num_format)
     curate_report(report, values)
-    write_report(report)
+
+    # Calculate the output location for the final report and write to it
+    output_path = context.resolve_output_root() / "order_analysis.md"
+    write_report(report, output_path)
+
+    return {
+        "report_location": str(output_path),
+        "total_orders": int(values["total_count"]),
+        "total_profit": float(values["total_profit"]),
+    }
 
 
 if __name__ == "__main__":
