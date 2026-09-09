@@ -58,11 +58,20 @@ def profit_per_order(df):
 
 
 def main(context=None):
+    # Get stage configuration for this stage
     config = context.get_stage_config("1_derive_vars")
 
-    df = pd.read_csv(config["input_location"])
+    # Source data path for previous stage results which are required
+    # for this stage and read those in
+    data_path = context.resolve_given_path(
+        "0_clean_data", "output_location", "orders_cleaned.csv", context.get_data_dir()
+    )
+    df = pd.read_csv(data_path)
+
+    # Source variable list from stage configuration for this stage
     delivery_times = config["delivery_times"]
 
+    # Run relevant functions for this stage
     df = correct_date_time(df)
     df = estimate_delivery(df, delivery_times)
     df = total_cost(df)
@@ -71,7 +80,16 @@ def main(context=None):
     df = postage_cost(df)
     df = production_cost(df)
     df = profit_per_order(df)
-    df.to_csv(config["output_location"], index=False)
+
+    # Save results to output location calculated based on run_directory
+    output_root = context.resolve_output_root()
+    df.to_csv(output_root / "orders_prepped.csv", index=False)
+
+    return {
+        "output_location": str(output_root / "orders_prepped.csv"),
+        "record_count": len(df),
+        "columns": list(df.columns),
+    }
 
 
 if __name__ == "__main__":
