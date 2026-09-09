@@ -1003,7 +1003,8 @@ class S3FileSystem:
                 self.data_path == self.setup.root and type == "data"
             ):
                 raise ValueError(
-                    "The directory or data path is the root of the S3 bucket. Cannot check existence of root."
+                    "The directory or data path is the S3 bucket. Cannot check "
+                    "existence of the bucket."
                 )
 
             if type == "dir":
@@ -1038,9 +1039,62 @@ class S3FileSystem:
     def is_file(
         self,
     ) -> bool:
-        raise NotImplementedError(
-            "The 'is_file' method is not implemented for S3FileSystem."
+        """
+        Checks whether a specific data file exists in the S3 file system.
+
+        This method implements the hadoop file system isFile() method on the URI
+        for a specific file. If a spark session has not been set up and parsed to
+        the FileSystem object then a temporary spark session will be created to
+        allow the check to be performed.
+
+        Returns
+        -------
+        ``bool``
+            True if the data file exists, False otherwise.
+
+        Raises
+        ------
+        ``ValueError``
+            If the data path is not set or if the data path is the S3
+            bucket as the isFile() method cannot be used on the bucket.
+        """
+        spark = self.setup.spark_session or (
+            SparkSession.builder.appName("S3FileSystemExistsCheck")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
         )
+
+        try:
+            # SparkContext exposes JVM handles as private attrs that are not in stubs.
+            sc: Any = spark.sparkContext
+            fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(f"s3a://{self.setup.root}"),
+                sc._jsc.hadoopConfiguration(),
+            )
+
+            if self.data_path == self.setup.root:
+                raise ValueError(
+                    "The data path is the S3 bucket. Cannot check existence of the bucket."
+                )
+
+            if self.data_path:
+                is_file_val = fs.isFile(
+                    sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
+                )
+            else:
+                raise ValueError(
+                    "Data path is not set. Cannot check existence of data file."
+                )
+
+            return bool(is_file_val)
+
+        finally:
+            if self.setup.spark_session is None:
+                spark.stop()
+            else:
+                pass
 
     def is_absolute(
         self,
