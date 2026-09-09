@@ -166,7 +166,7 @@ class Stage:
 
         Parameters
         ----------
-        if not file_path.exists(type="data"):
+        if not file_path.exists(path_type="data"):
             raise StageConfigurationError(f"Stage source file does not exist: {file_path}")
 
         return cls(
@@ -192,7 +192,7 @@ class Stage:
             file_path.spark_session = spark_session
         file_system = FileSystemFactory.create(file_path)
         path = file_system.expand_user()
-        if not file_system.exists(type="data"):
+        if not file_system.exists(path_type="data"):
             raise StageConfigurationError(f"Stage source file does not exist: {path}")
 
         return cls(

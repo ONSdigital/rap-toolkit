@@ -388,7 +388,7 @@ class PipelineConfig:
         """
         file_system = FileSystemFactory.create(path)
         config_path = file_system.expand_user()
-        if not file_system.exists(type="data"):
+        if not file_system.exists(path_type="data"):
             raise FileNotFoundError(
                 "Config file does not exist: {0}".format(config_path)
             )
@@ -1109,7 +1109,7 @@ class PipelineRun:
 
         fs = FileSystemFactory.create(file_path)
 
-        if not fs.exists(type="file"):
+        if not fs.exists(path_type="file"):
             raise FileNotFoundError(
                 f"Pipeline run file does not exist: {file_path.create_uri()}"
             )

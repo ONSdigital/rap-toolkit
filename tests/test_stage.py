@@ -626,7 +626,7 @@ class TestStageFromFile(TestStageFactories):
 
         assert Stage.from_file(test_stage, entrypoint="main") == Stage(
             "test_stage.py",
-            test_stage_fs.resolve(type="data"),
+            test_stage_fs.resolve(path_type="data"),
             (),
             {},
             "main",
@@ -634,7 +634,7 @@ class TestStageFromFile(TestStageFactories):
         )
 
         assert Stage.from_file(test_stage, name="Stage_1", entrypoint="main") == Stage(
-            "Stage_1", test_stage_fs.resolve(type="data"), (), {}, "main", "python"
+            "Stage_1", test_stage_fs.resolve(path_type="data"), (), {}, "main", "python"
         )
 
     def test_stage_from_files_error(self, tmp_path: Path) -> None:
@@ -679,7 +679,7 @@ class TestStageFromFile(TestStageFactories):
 
         stage = Stage.from_file(script)
 
-        resolved = script_fs.resolve(type="data")
+        resolved = script_fs.resolve(path_type="data")
 
         assert isinstance(stage.source, FileSystemSetUp)
         assert resolved is not None
