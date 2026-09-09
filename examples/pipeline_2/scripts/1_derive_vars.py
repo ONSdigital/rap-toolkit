@@ -57,7 +57,7 @@ def profit_per_order(df):
     return df
 
 
-def main(context=None):
+def main(context):
     # Get stage configuration for this stage
     config = context.get_stage_config("1_derive_vars")
 
