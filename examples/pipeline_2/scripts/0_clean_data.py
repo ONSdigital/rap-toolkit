@@ -31,21 +31,39 @@ def standardise_columns(df):
     return df
 
 
-def main(context=None):
+def main(context):
+    # Load stage configuration
     config = context.get_stage_config("0_clean_data")
-    print(config)
 
-    orders = pd.read_csv(config["input_location"])
+    # Calculate location for run outputs
+    output_root = context.resolve_output_root()
+    full_output_location = output_root / "orders_cleaned.csv"
 
+    # Calculate location of data input
+    data_dir = context.get_data_dir()
+    orders = pd.read_csv(data_dir / "orders.csv")
+
+    # Source variable lists from stage configuration
     expected_variables = config["expected_variables"]
     identifiable_cols = config["identifiable_cols"]
 
+    # Run functions required for this stage
     check_variables(orders, expected_variables)
     print(orders.dtypes)
     orders = remove_identifiable(orders, identifiable_cols)
     orders = standardise_columns(orders)
-    orders.to_csv(config["output_location"], index=False)
+
+    # Save cleaned data to run specific output location defined earlier in function
+    orders.to_csv(full_output_location, index=False)
+
+    return {
+        "output_location": str(full_output_location),
+        "expected_variables": expected_variables,
+        "identifiable_cols": identifiable_cols,
+        "record_count": len(orders),
+        "columns": list(orders.columns),
+    }
 
 
 if __name__ == "__main__":
-    main()
+    main(context=None)

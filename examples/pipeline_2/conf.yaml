@@ -17,7 +17,7 @@ pipeline_variables:
   working_dir: examples/pipeline_2
   project_root: examples/pipeline_2
   data_dir: examples/pipeline_2/data
-  output_dir: examples/pipeline_2/outputs
+  output_dir: examples/pipeline_2/runs
   log_dir: examples/pipeline_2/logs
   overwrite: True
   metadata:
@@ -48,11 +48,7 @@ stage_configuration:
       - "age"
       - "dob"
       - "address"
-    output_location: examples/pipeline_2/data/orders_cleaned.csv
-    input_location: examples/pipeline_2/data/orders.csv
   1_derive_vars:
-    input_location: examples/pipeline_2/data/orders_cleaned.csv
-    output_location: examples/pipeline_2/data/orders_prepped.csv
     delivery_times:
       north: 14
       south: 4
@@ -82,8 +78,6 @@ stage_configuration:
     total_production_cost: "Total_production_cost"
     order_profit: "Order_profit"
   2_reporting:
-    input_location: examples/pipeline_2/data/orders_prepped.csv
-    report_location: examples/pipeline_2/outputs/order_analysis.md
     region: "Region"
     order_profit: "Order_profit"
     quantity: "Quantity"
