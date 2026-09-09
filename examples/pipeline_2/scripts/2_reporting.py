@@ -120,7 +120,7 @@ def write_report(report, output_path):
     report_file.write_text("\n".join(report), encoding="utf-8")
 
 
-def main(context=None):
+def main(context):
     # Read in processed data from stage "1_derive_vars"
     data_loc = context.resolve_given_path(
         "1_derive_vars", "output_location", "orders_prepped.csv", context.get_data_dir()
