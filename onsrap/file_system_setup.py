@@ -1132,9 +1132,41 @@ class S3FileSystem:
         self,
         encoding: Optional[str] = "utf-8",
     ) -> str:
-        raise NotImplementedError(
-            "The 'read_text' method is not implemented for S3FileSystem."
+        """
+        Read the content of a data file as text from S3 using Spark's
+        wholeTextFiles method. This method requires a Spark session to be set up and
+        passed to the FileSystemSetUp object. If a Spark session is not provided, a
+        temporary Spark session will be created for the duration of the read operation.
+
+        Parameters
+        ----------
+        ``encoding`` : Optional[str], default = "utf-8"
+            The encoding to use when reading the file. Note that Spark's wholeTextFiles
+            method reads files as UTF-8 by default, and this parameter is included for
+            compatibility with the FileSystem protocol.
+
+        Returns
+        -------
+        ``str``
+            The content of the data file as a string.
+        """
+        spark = self.setup.spark_session or (
+            SparkSession.builder.appName("S3FileSystemReadText")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
         )
+
+        try:
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot read text from a file.")
+            return spark.sparkContext.wholeTextFiles(self.data_path).values().first()
+        finally:
+            if self.setup.spark_session is None:
+                spark.stop()
+            else:
+                pass
 
     def open(
         self,
