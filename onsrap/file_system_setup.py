@@ -1124,9 +1124,57 @@ class S3FileSystem:
         parents: bool = True,
         exist_ok: bool = True,
     ) -> None:
-        raise NotImplementedError(
-            "The 'mkdir' method is not implemented for S3FileSystem."
+        """
+        Create the target directory in S3 via Hadoop FileSystem.mkdirs().
+
+        Parameters
+        ----------
+        ``parents``: bool, default = True
+            This is not used for S3 as the file structure is flat and therefore when
+            a directory is created, the parent directories are also created. This is
+            kept in the method signature for compatibility with the FileSystem protocol.
+        ``exist_ok``: bool, default = True
+            If False, raise if the directory already exists.
+        """
+        spark = self.setup.spark_session or (
+            SparkSession.builder.appName("S3FileSystemMkdir")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
         )
+
+        try:
+            # SparkContext exposes JVM handles as private attrs that are not in stubs.
+            sc: Any = spark.sparkContext
+            fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(f"s3a://{self.setup.root}"),
+                sc._jsc.hadoopConfiguration(),
+            )
+
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot create directory.")
+            if self.dir_path == self.setup.root:
+                raise ValueError(
+                    "The directory path is the S3 bucket. Cannot create the bucket path."
+                )
+
+            path_obj = sc._jvm.org.apache.hadoop.fs.Path(self.dir_path)
+
+            if fs.exists(path_obj):
+                if exist_ok:
+                    return
+                raise FileExistsError(f"Directory already exists: {self.dir_path}")
+
+            created = fs.mkdirs(path_obj)
+            if not created and not fs.exists(path_obj):
+                raise OSError(f"Failed to create directory: {self.dir_path}")
+
+        finally:
+            if self.setup.spark_session is None:
+                spark.stop()
+            else:
+                pass
 
     def read_text(
         self,
