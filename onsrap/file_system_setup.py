@@ -1236,9 +1236,18 @@ class S3FileSystem:
     def expand_user(
         self,
     ) -> str:
-        raise NotImplementedError(
-            "The 'expand_user' method is not implemented for S3FileSystem."
-        )
+        """
+        Expands the user tilde (~) in the path. This method is not applicable for S3
+        paths, as S3 does not have a concept of user home directories. Therefore, this
+        method will return the path as a URI without any expansion.
+
+        Returns
+        -------
+        ``str``
+            The path as a URI without any expansion.
+        """
+        str_value = self.setup.create_uri()
+        return str_value
 
     def resolve(
         self,
