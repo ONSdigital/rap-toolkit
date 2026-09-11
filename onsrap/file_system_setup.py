@@ -1244,9 +1244,44 @@ class S3FileSystem:
         self,
         path_type: str,  # dir or data
     ) -> str | Path:
-        raise NotImplementedError(
-            "The 'resolve' method is not implemented for S3FileSystem."
-        )
+        """
+        Resolve the path to an absolute path in S3.
+
+        As paths in S3 are automatically absolute provided they are in a URI format,
+        this method will ensure that all elements of the path are present and that the
+        path is not the bucket itself. If either of these conditions are not met, an
+        error will be raised.
+
+        Parameters
+        ----------
+        ``path_type`` : str
+            The type of path to resolve ('dir' or 'data').
+
+        Returns
+        -------
+        ``str`` | ``Path``
+            The resolved absolute path in S3.
+        """
+        if path_type == "dir":
+            if not self.dir_path:
+                raise ValueError(
+                    "Directory path is not set. Cannot resolve directory path."
+                )
+            if self.dir_path == self.setup.root:
+                raise ValueError(
+                    "The directory path is the S3 bucket. Cannot resolve the bucket path."
+                )
+            return self.dir_path
+        elif path_type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot resolve data path.")
+            if self.data_path == self.setup.root:
+                raise ValueError(
+                    "The data path is the S3 bucket. Cannot resolve the bucket path."
+                )
+            return self.data_path
+        else:
+            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
