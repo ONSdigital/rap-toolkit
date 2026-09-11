@@ -518,7 +518,7 @@ class FileSystem(Protocol):
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path: ...
+    ) -> str | Path: ...
 
 
 class LocalFileSystem:
@@ -896,7 +896,7 @@ class LocalFileSystem:
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path:
+    ) -> str | Path:
         """
         Returns the parent directory of the data file or directory.
 
@@ -1313,24 +1313,95 @@ class S3FileSystem:
         self,
         *paths: str,
     ) -> str | Path:
-        raise NotImplementedError(
-            "The 'join_path' method is not implemented for S3FileSystem."
-        )
+        """
+        Returns a str URI of the new path with joined paths appended to the end.
+
+        This method only works with dir_path as conceptually it does not make sense
+        to join paths to a data file. If the dir_path is not set, an error will be raised.
+
+        Parameters
+        ----------
+        ``*paths`` : str
+            The path components to join.
+
+        Raises
+        ------
+        ``ValueError``
+            If the dir_path is not set.
+        """
+        if not self.dir_path:
+            raise ValueError(
+                "Directory path is not set. Cannot join paths to a non-existent directory."
+            )
+        joined_path = self.dir_path.rstrip("/") + "/" + "/".join(paths)
+        return joined_path
 
     def suffix(
         self,
     ) -> str:
-        raise NotImplementedError(
-            "The 'suffix' method is not implemented for S3FileSystem."
-        )
+        """
+        Returns the file extension for the data file in S3.
+
+        Returns
+        -------
+        ``str``
+            The file extension (suffix) of the data file.
+
+        Raises
+        ------
+        ``ValueError``
+            If the data path is not set, indicating that there is no file to get a suffix from.
+        """
+        if not self.data_path:
+            raise ValueError(
+                "Data path is not set. Cannot get suffix of a non-existent file."
+            )
+
+        path_part = urlsplit(self.data_path).path
+        return PurePosixPath(path_part).suffix
 
     def stem(
         self,
         path_type: str,  # dir or data
     ) -> str:
-        raise NotImplementedError(
-            "The 'stem' method is not implemented for S3FileSystem."
-        )
+        """
+        Returns the stem of the requested path, which is the final component of the
+        path without its suffix.
+
+        Converts the URI of the S3 path into a PurePosixPath to extract the stem.
+
+        Parameters
+        ----------
+        ``path_type`` : str
+            The type of path to get the stem for ('dir' or 'data').
+
+        Returns
+        -------
+        ``str``
+            The stem of the path corresponding to the specified path_type.
+
+        Raises
+        ------
+        ``ValueError``
+            If the path_type specified is not 'dir' or 'data', or if the corresponding
+            path is not set.
+        """
+        if path_type == "dir":
+            if not self.dir_path:
+                raise ValueError(
+                    "Directory path is not set. Cannot get stem of a non-existent directory."
+                )
+            path_part = urlsplit(self.dir_path).path
+            return PurePosixPath(path_part).stem
+        elif path_type == "data":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot get stem of a non-existent file."
+                )
+            path_part = urlsplit(self.data_path).path
+            return PurePosixPath(path_part).stem
+        else:
+            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
 
     def write_text(
         self,
@@ -1344,10 +1415,47 @@ class S3FileSystem:
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path:
-        raise NotImplementedError(
-            "The 'parent' method is not implemented for S3FileSystem."
-        )
+    ) -> str | Path:
+        """
+        Extract the parent directories of the requested path.
+
+        This method conceptually does not make sense for S3 however can make sense
+        to extract sections of the prefix of the requested path to allow for the
+        creation of new directories. This also allows for compatability of the S3FileSystem
+        with the FileSystem protocol.
+
+        Parameters
+        ----------
+        ``path_type`` : str
+            The type of path to get the parent for ('dir' or 'data').
+
+        Returns
+        -------
+        ``str`` | ``Path``
+            The parent directory of the path corresponding to the specified path_type.
+
+        Raises
+        ------
+        ``ValueError``
+            If the path_type specified is not 'dir' or 'data', or if the corresponding
+            path is not set.
+        """
+        if path_type == "dir":
+            if not self.dir_path:
+                raise ValueError(
+                    "Directory path is not set. Cannot get parent of a non-existent directory."
+                )
+            path_part = urlsplit(self.dir_path).path
+            return str(PurePosixPath(path_part).parent)
+        elif path_type == "data":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot get parent of a non-existent file."
+                )
+            path_part = urlsplit(self.data_path).path
+            return str(PurePosixPath(path_part).parent)
+        else:
+            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
 
 
 class FileSystemFactory:
