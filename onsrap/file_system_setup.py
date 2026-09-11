@@ -1,11 +1,12 @@
 import glob
-import importlib.util
 import logging
 import re
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
+from importlib.util import spec_from_file_location
+from io import StringIO, TextIOBase
 from pathlib import Path, PurePosixPath
-from typing import IO, Any, Optional, Protocol, Type
+from typing import Any, Literal, Optional, Protocol, Type, overload
 from urllib.parse import unquote, urlparse, urlsplit
 
 from pyspark.sql import SparkSession
@@ -17,6 +18,26 @@ WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 DB_TABLE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*\.(?!py$|ipynb$|sql$|csv$|tsv$|parquet$|json$|yaml$|yml$|txt$|xlsx$|xls$|xlsm$|xlsb$|ods$)[A-Za-z_][A-Za-z0-9_]*$"
 )
+
+
+class ReadableTextStream(Protocol):
+    def read(self, size: int = -1) -> str: ...
+    def close(self) -> None: ...
+    @property
+    def closed(self) -> bool: ...
+    def __enter__(self) -> "ReadableTextStream": ...
+    def __exit__(self, exc_type, exc, tb) -> None: ...
+
+
+class WritableTextStream(Protocol):
+    def write(self, text: str) -> int: ...
+    def writelines(self, lines) -> None: ...
+    def flush(self) -> None: ...
+    def close(self) -> None: ...
+    @property
+    def closed(self) -> bool: ...
+    def __enter__(self) -> "WritableTextStream": ...
+    def __exit__(self, exc_type, exc, tb) -> None: ...
 
 
 @dataclass
@@ -464,11 +485,25 @@ class FileSystem(Protocol):
         encoding: Optional[str] = "utf-8",
     ) -> str: ...
 
+    @overload
+    def open(
+        self,
+        mode: Literal["r"] = "r",
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream: ...
+
+    @overload
+    def open(
+        self,
+        mode: Literal["w"],
+        encoding: str = "utf-8",
+    ) -> WritableTextStream: ...
+
     def open(
         self,
         mode: str = "r",
-        encoding: Optional[str] = "utf-8",
-    ) -> IO: ...
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream | WritableTextStream: ...
 
     def glob(
         self,
@@ -689,11 +724,25 @@ class LocalFileSystem:
             raise ValueError("Data path is not set. Cannot read text from a file.")
         return self.data_path.read_text(encoding=encoding)
 
+    @overload
+    def open(
+        self,
+        mode: Literal["r"] = "r",
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream: ...
+
+    @overload
+    def open(
+        self,
+        mode: Literal["w"],
+        encoding: str = "utf-8",
+    ) -> WritableTextStream: ...
+
     def open(
         self,
         mode: str = "r",
-        encoding: Optional[str] = "utf-8",
-    ) -> IO:
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream | WritableTextStream:
         """
         Open the data file in the local file system.
 
@@ -706,7 +755,7 @@ class LocalFileSystem:
 
         Returns
         -------
-        ``IO``
+        ``TextIOBase``
             A file object corresponding to the opened file.
         """
         if not self.data_path:
@@ -802,7 +851,7 @@ class LocalFileSystem:
         ``ModuleSpec`` or None
             The module spec corresponding to the data file, or None if it cannot be determined.
         """
-        return importlib.util.spec_from_file_location(module_name, str(self.data_path))
+        return spec_from_file_location(module_name, str(self.data_path))
 
     def file_handler(
         self,
@@ -1216,14 +1265,51 @@ class S3FileSystem:
             else:
                 pass
 
+    @overload
+    def open(
+        self,
+        mode: Literal["r"] = "r",
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream: ...
+
+    @overload
+    def open(
+        self,
+        mode: Literal["w"],
+        encoding: str = "utf-8",
+    ) -> WritableTextStream: ...
+
     def open(
         self,
         mode: str = "r",
-        encoding: Optional[str] = "utf-8",
-    ) -> IO:
-        raise NotImplementedError(
-            "The 'open' method is not implemented for S3FileSystem."
-        )
+        encoding: str = "utf-8",
+    ) -> ReadableTextStream | WritableTextStream:
+        """
+        Opens a file in S3 to be read or written to by the package.
+
+        All mentions of .open() within this package are in the context of .yaml
+        files and therefore this method will only function with .yaml. It will raise
+        an error if the suffix is not .yaml.
+        """
+        suffix = self.suffix()
+        if suffix not in (".yaml", ".yml"):
+            raise ValueError(
+                f"The 'open' method only supports .yaml files. The provided file has suffix: {suffix}"
+            )
+        if mode == "r":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot open a file for reading."
+                )
+            return StringIO(self.read_text(encoding=encoding))
+        elif mode == "w":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot open a file for writing."
+                )
+            return S3YamlWriter(self, encoding=encoding, overwrite=True)
+        else:
+            raise ValueError(f"Unsupported mode: {mode}")
 
     def glob(
         self,
@@ -1457,6 +1543,54 @@ class S3FileSystem:
         else:
             raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
 
+    def _persist_text_to_s3(self, content, encoding="utf-8", overwrite=True):
+        """
+        Helper method to save text content to an S3 file system using Spark.
+
+        Intended for implementation only as part of open() and write_text() methods
+        in the S3FileSystem class. This method will create a Spark session if one is
+        not already provided.
+
+        Parameters
+        ----------
+        ``content`` : str
+            The text content to write to the S3 file.
+        ``encoding`` : str, optional
+            The encoding to use for writing the text, by default "utf-8".
+        ``overwrite`` : bool, optional
+            Whether to overwrite the file if it already exists, by default True.
+
+        Returns
+        -------
+        ``None``
+            This method does not return any value.
+        """
+        spark = self.setup.spark_session or (
+            SparkSession.builder.appName("S3FileSystemSaveTextFile")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
+        )
+
+        output_stream = None
+        try:
+            sc = spark.sparkContext
+            fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(f"s3a://{self.setup.root}"),
+                sc._jsc.hadoopConfiguration(),
+            )
+            path = sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
+            output_stream = fs.create(path, overwrite)
+            output_stream.write(bytearray(content.encode(encoding)))
+
+        finally:
+            if output_stream is not None:
+                output_stream.close()
+
+            if self.setup.spark_session is None:
+                spark.stop()
+
 
 class FileSystemFactory:
     _registry: dict[str, Type[FileSystem]] = {}
@@ -1537,3 +1671,83 @@ class FileSystemFactory:
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
 FileSystemFactory.register("s3://", S3FileSystem)
+
+
+class S3YamlWriter(TextIOBase):
+    """
+    A writable text stream for writing YAML content to S3.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        The S3 file system instance.
+    encoding : str, optional
+        The text encoding, by default "utf-8".
+    overwrite : bool, optional
+        Whether to overwrite existing content, by default True.
+    """
+
+    def __init__(
+        self,
+        fs: S3FileSystem,
+        encoding: str = "utf-8",
+        overwrite: bool = True,
+    ) -> None:
+        self.fs = fs
+        self.encoding = encoding
+        self.overwrite = overwrite
+        self._buffer = StringIO()
+        self._closed = False
+
+    def writable(self) -> bool:
+        return not self._closed
+
+    def readable(self) -> bool:
+        return False
+
+    def seekable(self) -> bool:
+        return False
+
+    def write(self, text: str) -> int:
+        if self._closed:
+            raise ValueError("Cannot write to a closed S3YamlWriter.")
+        return self._buffer.write(text)
+
+    def writelines(self, lines) -> None:
+        if self._closed:
+            raise ValueError("Cannot write to a closed S3YamlWriter.")
+        self._buffer.writelines(lines)
+
+    def flush(self) -> None:
+        if self._closed:
+            raise ValueError("Cannot flush a closed S3YamlWriter.")
+        return None
+
+    def close(self) -> None:
+        if self._closed:
+            return
+
+        content = self._buffer.getvalue()
+        self.fs._persist_text_to_s3(
+            content=content,
+            encoding=self.encoding,
+            overwrite=self.overwrite,
+        )
+        self._buffer.close()
+        self._closed = True
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def __enter__(self):
+        if self._closed:
+            raise ValueError("Cannot re-enter a closed S3YamlWriter.")
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is None:
+            self.close()
+        else:
+            self._buffer.close()
+            self._closed = True
