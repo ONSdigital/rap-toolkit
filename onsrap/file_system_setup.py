@@ -1,4 +1,5 @@
 import glob
+import importlib
 import logging
 import re
 from dataclasses import dataclass
@@ -38,6 +39,68 @@ class WritableTextStream(Protocol):
     def closed(self) -> bool: ...
     def __enter__(self) -> "WritableTextStream": ...
     def __exit__(self, exc_type, exc, tb) -> None: ...
+
+
+class S3SourceLoader(importlib.abc.SourceLoader):
+    """
+    SourceLoader implementation that reads Python source from S3 and lets
+    importlib compile/execute it as a normal module.
+    """
+
+    def __init__(
+        self,
+        fs: "S3FileSystem",
+        module_name: str,
+        source_uri: str,
+        encoding: str = "utf-8",
+    ) -> None:
+        self._fs = fs
+        self._module_name = module_name
+        self._source_uri = source_uri
+        self._encoding = encoding
+
+    def get_filename(self, fullname: str) -> str:
+        """
+        Used in tracebacks and module metadata as module.__file__.
+        """
+        if fullname != self._module_name:
+            # Optional: keep strict to avoid accidental cross-use.
+            raise ImportError(
+                f"Loader bound to '{self._module_name}', got request for '{fullname}'."
+            )
+        return self._source_uri
+
+    def get_data(self, path: str) -> bytes:
+        """
+        Return source bytes for importlib.
+        """
+        if path != self._source_uri:
+            raise FileNotFoundError(f"Unexpected source path: {path}")
+
+        # TODO: if you later add binary-safe S3 reads, use that here.
+        text = self._fs.read_text(encoding=self._encoding)
+        return text.encode(self._encoding)
+
+    def is_package(self, fullname: str) -> bool:
+        """
+        Stage files are plain modules, not packages.
+        """
+        return False
+
+    def path_stats(self, path: str) -> dict[str, Any]:
+        """
+        Optional optimization for invalidation/reload behavior.
+        Provide at least mtime and size where possible.
+        """
+        # TODO: replace with real S3 object metadata (mtime epoch float, size int).
+        source = self.get_data(path)
+        return {"mtime": 0.0, "size": len(source)}
+
+    def set_data(self, path: str, data: bytes) -> None:
+        """
+        Disable bytecode cache writes for S3 by default.
+        """
+        return
 
 
 @dataclass
@@ -1440,10 +1503,61 @@ class S3FileSystem:
     def spec_from_file_location(
         self,
         module_name: str,
-    ):
-        raise NotImplementedError(
-            "The 'spec_from_file_location' method is not implemented for S3FileSystem."
+    ) -> importlib.machinery.ModuleSpec | None:
+        """
+        S3-aware equivalent of importlib.util.spec_from_file_location for stage files.
+
+        Parameters
+        ----------
+        ``module_name`` : str
+            The name of the module for which to create the spec.
+
+        Raises
+        ------
+        ``ValueError``
+            If the data path is not set, indicating that there is no file to create a spec from.
+
+        Returns
+        -------
+        ``ModuleSpec`` or None
+            The module spec corresponding to the data file, or None if it cannot be determined.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot create module spec.")
+
+        # Match your existing guard style.
+        if not self.exists(path_type="data"):
+            return None
+
+        # Optional but recommended for safety.
+        if self.suffix() != ".py":
+            raise ValueError(
+                f"Only Python source files are supported for module loading, got: {self.suffix()}"
+            )
+
+        source_uri = str(self.data_path)
+        loader = S3SourceLoader(
+            fs=self,
+            module_name=module_name,
+            source_uri=source_uri,
+            encoding="utf-8",
         )
+
+        spec = importlib.util.spec_from_loader(
+            module_name,
+            loader,
+            origin=source_uri,
+            is_package=False,
+        )
+
+        if spec is None:
+            return None
+
+        # Keep metadata explicit and predictable.
+        spec.has_location = True
+        spec.cached = None
+        spec.submodule_search_locations = None
+        return spec
 
     def file_handler(
         self,
