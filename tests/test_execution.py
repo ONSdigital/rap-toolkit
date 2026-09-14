@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -175,6 +176,18 @@ class TestExecutionContext:
         execution.record(stageresult)
         assert execution.stage_results == {"stage_test": expected_recorded_stage_result}
         assert execution.variables == {"stage_test": "example output"}
+
+    def test_log_exposes_logger_event(self, execution) -> None:
+        """
+        Tests that ExecutionContext.log forwards custom stage logging to Logger.event.
+        """
+        execution.logger.event = Mock()
+
+        execution.log("Custom stage message", step="validation")
+
+        execution.logger.event.assert_called_once_with(
+            "Custom stage message", step="validation"
+        )
 
     def test_result_for(
         self, execution, stageresult, expected_recorded_stage_result
