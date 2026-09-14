@@ -3,6 +3,7 @@ import importlib
 import logging
 import re
 from dataclasses import dataclass
+from importlib.abc import SourceLoader
 from importlib.machinery import ModuleSpec
 from importlib.util import spec_from_file_location
 from io import StringIO, TextIOBase
@@ -50,7 +51,7 @@ class WritableTextStream(Protocol):
     def __exit__(self, exc_type, exc, tb) -> None: ...
 
 
-class S3SourceLoader(importlib.abc.SourceLoader):
+class S3SourceLoader(SourceLoader):
     """
     SourceLoader implementation that reads Python source from S3 and lets
     importlib compile/execute it as a normal module.
@@ -1940,6 +1941,7 @@ class FileSystemFactory:
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
 FileSystemFactory.register("s3://", S3FileSystem)
+FileSystemFactory.register("s3a://", S3FileSystem)
 
 
 class S3YamlWriter(TextIOBase):
