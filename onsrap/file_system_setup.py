@@ -1315,9 +1315,68 @@ class S3FileSystem:
         self,
         specific_pattern: str,
     ) -> list[str]:
-        raise NotImplementedError(
-            "The 'glob' method is not implemented for S3FileSystem."
+        """
+        Run a glob search on all files in an S3 directory to identify files matching
+        a string input.
+
+        Utilises the existing spark session unless one isn't available in which case it
+        creates a new session and closes it after the interaction. It will not close a
+        spark session that is parsed to the method as it is assumed that the session is
+        being used elsewhere.
+
+        Parameters
+        ----------
+        ``specific_pattern`` : str
+            The glob pattern to match files against (e.g., "*.txt" for all text files).
+
+        Returns
+        -------
+        ``list[str]``
+            A list of paths matching the glob pattern.
+
+        Raises
+        ------
+        ``ValueError``
+            If the directory path is not set or if the directory path is the S3
+            bucket, as globbing cannot be performed on the bucket itself.
+        """
+        spark = self.setup.spark_session or (
+            SparkSession.builder.appName("S3FileSystemGlob")
+            .config(
+                "spark.kerberos.access.hadoopFileSystem", f"s3a://{self.setup.root}"
+            )
+            .getOrCreate()
         )
+
+        try:
+            # SparkContext exposes JVM handles as private attrs that are not in stubs.
+            sc: Any = spark.sparkContext
+            fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(f"s3a://{self.setup.root}"),
+                sc._jsc.hadoopConfiguration(),
+            )
+
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot create directory.")
+            if self.dir_path == self.setup.root:
+                raise ValueError(
+                    "The directory path is the S3 bucket. Cannot create the bucket path."
+                )
+
+            path_obj = sc._jvm.org.apache.hadoop.fs.Path(
+                self.dir_path + f"/{specific_pattern}"
+            )
+            file_statuses = fs.globStatus(path_obj)
+            matched_paths = [
+                str(file_status.getPath().toString()) for file_status in file_statuses
+            ]
+            return matched_paths
+
+        finally:
+            if self.setup.spark_session is None:
+                spark.stop()
+            else:
+                pass
 
     def expand_user(
         self,
