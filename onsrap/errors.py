@@ -99,3 +99,45 @@ class HistoricalPipelineLoadError(OnsrapError):
     Raised when there is an issue loading a previous PipelineRun
     instance.
     """
+
+
+class FileSystemError(OnsrapError):
+    """
+    Raised when there is an issue with the file system, such as
+    missing files or directories.
+    """
+
+
+class SparkError(FileSystemError):
+    """
+    Raised when there is an issue with Spark operations.
+    Child class with ``FileSystemError`` as the parent class.
+    """
+
+
+class FileSystemSetUpError(FileSystemError):
+    """
+    Raised when there is an issue setting up the file system.
+    Child class with ``FileSystemError`` as the parent class.
+    """
+
+
+class ArgError(OnsrapError):
+    """
+    Raised when there is an issue with the arguments provided to a function or method.
+    Child class with ``OnsrapError`` as the parent class.
+    """
+
+
+class PathTypeError(ArgError):
+    """
+    Raised when a path is of an unexpected type (e.g., a file instead of a directory).
+    Child class with ``ArgError`` as the parent class.
+    """
+
+
+class S3WritingError(FileSystemError):
+    """
+    Raised when there is an issue writing to S3.
+    Child class with ``FileSystemError`` as the parent class.
+    """

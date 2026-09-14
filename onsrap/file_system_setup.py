@@ -12,6 +12,15 @@ from urllib.parse import unquote, urlparse, urlsplit
 
 from pyspark.sql import SparkSession
 
+from onsrap.errors import (
+    ArgError,
+    FileSystemError,
+    FileSystemSetUpError,
+    PathTypeError,
+    S3WritingError,
+    SparkError,
+)
+
 # identifies windows drive letters in file paths
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
@@ -183,7 +192,7 @@ class FileSystemSetUp:
         """
         if DB_TABLE_RE.match(uri):
             if spark_session is None:
-                raise ValueError(
+                raise SparkError(
                     "A SparkSession must be provided when using a database.table URI."
                 )
             database_name, table_name = uri.split(".", 1)
@@ -263,7 +272,7 @@ class FileSystemSetUp:
         elif isinstance(path, Path):
             return cls.from_path(path, path_type, spark_session)
         elif path is None:
-            raise ValueError(
+            raise FileSystemSetUpError(
                 "You cannot create a FileSystemSetUp instance from a "
                 "Nonetype. Please enter a str or Path."
             )
@@ -316,7 +325,7 @@ class FileSystemSetUp:
 
         text = input.strip()
         if not text:
-            raise ValueError("Input path cannot be empty or whitespace.")
+            raise FileSystemSetUpError("Input path cannot be empty or whitespace.")
 
         if WINDOWS_DRIVE_RE.match(text):
             return "local str"
@@ -333,7 +342,9 @@ class FileSystemSetUp:
         except Exception:
             pass
 
-        raise ValueError(f"Input path {input} is not a valid local path or URI.")
+        raise FileSystemSetUpError(
+            f"Input path {input} is not a valid local path or URI."
+        )
 
     @staticmethod
     def _normalisation(input: Path | str) -> str:
@@ -376,7 +387,7 @@ class FileSystemSetUp:
             return input.strip()
 
         else:
-            raise ValueError(f"Unknown classification for input: {input}")
+            raise FileSystemSetUpError(f"Unknown classification for input: {input}")
 
     @staticmethod
     def _uri_to_parts(uri: str, type: str) -> tuple[str, str, str | None, str | None]:
@@ -396,12 +407,12 @@ class FileSystemSetUp:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the URI does not contain a scheme.
         """
         parsed = urlsplit(uri)
         if not parsed.scheme:
-            raise ValueError(f"Expected URI with scheme, got: {uri!r}")
+            raise FileSystemSetUpError(f"Expected URI with scheme, got: {uri!r}")
 
         if parsed.scheme == "file":
             prefix = f"{parsed.scheme}:///"
@@ -465,7 +476,7 @@ class FileSystemSetUp:
             db_fpath = df.collect()[0][0]
             return db_fpath
         except IndexError:
-            raise ValueError(
+            raise SparkError(
                 f"Database '{db_name}' not found in Spark catalog."
             ) from None
 
@@ -691,8 +702,11 @@ class LocalFileSystem:
 
         Raises
         ------
-        ValueError
+        ``PathTypeError``
             If the path_type specified is not 'dir' or 'data'.
+        ``FileSystemSetUpError``
+            If the data path is not set in the FileSystemSetUp instance
+            when checking whether a file exists.
         """
         if path_type == "dir":
             return self.dir_path.exists()
@@ -700,11 +714,11 @@ class LocalFileSystem:
             if self.data_path:
                 return self.data_path.exists()
             else:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot check existence of data file."
                 )
         else:
-            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
+            raise PathTypeError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def is_file(
         self,
@@ -721,7 +735,9 @@ class LocalFileSystem:
         if self.data_path:
             return self.data_path.is_file()
         else:
-            raise ValueError("Data path is not set. Cannot check if it is a file.")
+            raise FileSystemSetUpError(
+                "Data path is not set. Cannot check if it is a file."
+            )
 
     def is_absolute(
         self,
@@ -742,11 +758,11 @@ class LocalFileSystem:
             if self.data_path:
                 return self.data_path.is_absolute()
             else:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot check if it is absolute."
                 )
         else:
-            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
+            raise PathTypeError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,
@@ -784,7 +800,9 @@ class LocalFileSystem:
             The content of the data file as a string.
         """
         if not self.data_path:
-            raise ValueError("Data path is not set. Cannot read text from a file.")
+            raise FileSystemSetUpError(
+                "Data path is not set. Cannot read text from a file."
+            )
         return self.data_path.read_text(encoding=encoding)
 
     @overload
@@ -822,7 +840,7 @@ class LocalFileSystem:
             A file object corresponding to the opened file.
         """
         if not self.data_path:
-            raise ValueError("Data path is not set. Cannot open a file.")
+            raise FileSystemSetUpError("Data path is not set. Cannot open a file.")
         file = self.data_path
         return open(file, mode=mode, encoding=encoding)
 
@@ -884,8 +902,11 @@ class LocalFileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``PathTypeError``
             If the path_type specified is not 'dir' or 'data'.
+        ``FileSystemSetUpError``
+            If the data path is not set in the FileSystemSetUp instance when trying
+            to resolve the data path.
         """
         if path_type == "dir":
             return self.dir_path.resolve()
@@ -893,9 +914,11 @@ class LocalFileSystem:
             if self.data_path:
                 return self.data_path.resolve()
             else:
-                raise ValueError("Data path is not set. Cannot resolve data path.")
+                raise FileSystemSetUpError(
+                    "Data path is not set. Cannot resolve data path."
+                )
         else:
-            raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
+            raise PathTypeError("Invalid path_type. Expected 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
@@ -978,13 +1001,18 @@ class LocalFileSystem:
         ``str``
             The stem of the path corresponding to the specified path_type ('dir' or 'data'),
             or an empty string if the path is not set.
+
+        Raises
+        ------
+        ``PathTypeError``
+            If the path_type specified is not 'dir' or 'data'.
         """
         if path_type == "dir":
             return self.dir_path.stem if self.dir_path else ""
         elif path_type == "data":
             return self.data_path.stem if self.data_path else ""
         else:
-            raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
+            raise PathTypeError("Invalid path_type. Expected 'dir' or 'data'.")
 
     def write_text(
         self,
@@ -1000,9 +1028,15 @@ class LocalFileSystem:
             The text content to write to the data file.
         ``encoding`` : str, optional
             The encoding to use for writing the text, by default "utf-8".
+
+        Raises
+        ------
+        ``FileSystemSetUpError``
+            If the data path is not set in the FileSystemSetUp instance when trying
+            to write text to the data file.
         """
         if not self.data_path:
-            raise ValueError("Data path is not set. Cannot write text.")
+            raise FileSystemSetUpError("Data path is not set. Cannot write text.")
         self.data_path.write_text(content, encoding=encoding)
 
     def parent(
@@ -1011,6 +1045,13 @@ class LocalFileSystem:
     ) -> str | Path:
         """
         Returns the parent directory of the data file or directory.
+
+        Raises
+        ------
+        ``PathTypeError``
+            If the path_type specified is not 'dir' or 'data'.
+        ``FileSystemSetUpError``
+            If the specified path is not set in the FileSystemSetUp instance.
 
         Returns
         -------
@@ -1021,15 +1062,17 @@ class LocalFileSystem:
             if self.data_path:
                 return self.data_path.parent
             else:
-                raise ValueError("Data path is not set. Cannot get parent directory.")
+                raise FileSystemSetUpError(
+                    "Data path is not set. Cannot get parent directory."
+                )
         if path_type == "dir":
             if self.dir_path:
                 return self.dir_path.parent
             else:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Directory path is not set. Cannot get parent directory."
                 )
-        raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
+        raise PathTypeError("Invalid path_type. Expected 'dir' or 'data'.")
 
 
 class S3FileSystem:
@@ -1094,6 +1137,14 @@ class S3FileSystem:
         -------
         ``bool``
             True if the path exists, False otherwise.
+
+        Raises
+        ------
+        ``FileSystemSetUpError``
+            If the directory or data path is not set in the FileSystemSetUp instance
+            when checking for existence.
+        ``PathTypeError``
+            If the path_type specified is not 'dir' or 'data'.
         """
         spark = self.setup.spark_session or (
             SparkSession.builder.appName("S3FileSystemExistsCheck")
@@ -1114,7 +1165,7 @@ class S3FileSystem:
             if (self.dir_path == self.setup.root and path_type == "dir") or (
                 self.data_path == self.setup.root and path_type == "data"
             ):
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The directory or data path is the S3 bucket. Cannot check "
                     "existence of the bucket."
                 )
@@ -1125,7 +1176,7 @@ class S3FileSystem:
                         sc._jvm.org.apache.hadoop.fs.Path(self.dir_path)
                     )
                 else:
-                    raise ValueError(
+                    raise FileSystemSetUpError(
                         "Directory path is not set. Cannot check existence of directory."
                     )
             elif path_type == "data":
@@ -1134,11 +1185,11 @@ class S3FileSystem:
                         sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
                     )
                 else:
-                    raise ValueError(
+                    raise FileSystemSetUpError(
                         "Data path is not set. Cannot check existence of data file."
                     )
             else:
-                raise ValueError(
+                raise PathTypeError(
                     "Invalid path_type provided. Expected 'dir' or 'data'."
                 )
 
@@ -1168,7 +1219,7 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the data path is not set or if the data path is the S3
             bucket as the isFile() method cannot be used on the bucket.
         """
@@ -1189,7 +1240,7 @@ class S3FileSystem:
             )
 
             if self.data_path == self.setup.root:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The data path is the S3 bucket. Cannot check existence of the bucket."
                 )
 
@@ -1198,7 +1249,7 @@ class S3FileSystem:
                     sc._jvm.org.apache.hadoop.fs.Path(self.data_path)
                 )
             else:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot check existence of data file."
                 )
 
@@ -1229,7 +1280,7 @@ class S3FileSystem:
         elif path_type == "data":
             return bool(self.data_path and self.data_path != self.setup.root)
         else:
-            raise ValueError("Invalid path_type specified. Use 'dir' or 'data'.")
+            raise PathTypeError("Invalid path_type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,
@@ -1265,9 +1316,11 @@ class S3FileSystem:
             )
 
             if not self.dir_path:
-                raise ValueError("Directory path is not set. Cannot create directory.")
+                raise FileSystemSetUpError(
+                    "Directory path is not set. Cannot create directory."
+                )
             if self.dir_path == self.setup.root:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The directory path is the S3 bucket. Cannot create the bucket path."
                 )
 
@@ -1320,7 +1373,9 @@ class S3FileSystem:
 
         try:
             if not self.data_path:
-                raise ValueError("Data path is not set. Cannot read text from a file.")
+                raise FileSystemSetUpError(
+                    "Data path is not set. Cannot read text from a file."
+                )
             return spark.sparkContext.wholeTextFiles(self.data_path).values().first()
         finally:
             if self.setup.spark_session is None:
@@ -1356,23 +1411,23 @@ class S3FileSystem:
         """
         suffix = self.suffix()
         if suffix not in (".yaml", ".yml"):
-            raise ValueError(
+            raise TypeError(
                 f"The 'open' method only supports .yaml files. The provided file has suffix: {suffix}"
             )
         if mode == "r":
             if not self.data_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot open a file for reading."
                 )
             return StringIO(self.read_text(encoding=encoding))
         elif mode == "w":
             if not self.data_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot open a file for writing."
                 )
             return S3YamlWriter(self, encoding=encoding, overwrite=True)
         else:
-            raise ValueError(f"Unsupported mode: {mode}")
+            raise ArgError(f"Unsupported mode: {mode}")
 
     def glob(
         self,
@@ -1399,7 +1454,7 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the directory path is not set or if the directory path is the S3
             bucket, as globbing cannot be performed on the bucket itself.
         """
@@ -1420,9 +1475,11 @@ class S3FileSystem:
             )
 
             if not self.dir_path:
-                raise ValueError("Directory path is not set. Cannot create directory.")
+                raise FileSystemSetUpError(
+                    "Directory path is not set. Cannot create directory."
+                )
             if self.dir_path == self.setup.root:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The directory path is the S3 bucket. Cannot create the bucket path."
                 )
 
@@ -1481,24 +1538,26 @@ class S3FileSystem:
         """
         if path_type == "dir":
             if not self.dir_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Directory path is not set. Cannot resolve directory path."
                 )
             if self.dir_path == self.setup.root:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The directory path is the S3 bucket. Cannot resolve the bucket path."
                 )
             return self.dir_path
         elif path_type == "data":
             if not self.data_path:
-                raise ValueError("Data path is not set. Cannot resolve data path.")
+                raise FileSystemSetUpError(
+                    "Data path is not set. Cannot resolve data path."
+                )
             if self.data_path == self.setup.root:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "The data path is the S3 bucket. Cannot resolve the bucket path."
                 )
             return self.data_path
         else:
-            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
+            raise PathTypeError("path_type value is invalid. Expected 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
@@ -1514,16 +1573,19 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the data path is not set, indicating that there is no file to create a spec from.
-
+        ``TypeError``
+            If the file suffix is not .py, indicating that only Python source files are supported.
         Returns
         -------
         ``ModuleSpec`` or None
             The module spec corresponding to the data file, or None if it cannot be determined.
         """
         if not self.data_path:
-            raise ValueError("Data path is not set. Cannot create module spec.")
+            raise FileSystemSetUpError(
+                "Data path is not set. Cannot create module spec."
+            )
 
         # Match your existing guard style.
         if not self.exists(path_type="data"):
@@ -1531,7 +1593,7 @@ class S3FileSystem:
 
         # Optional but recommended for safety.
         if self.suffix() != ".py":
-            raise ValueError(
+            raise TypeError(
                 f"Only Python source files are supported for module loading, got: {self.suffix()}"
             )
 
@@ -1585,11 +1647,11 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the dir_path is not set.
         """
         if not self.dir_path:
-            raise ValueError(
+            raise FileSystemSetUpError(
                 "Directory path is not set. Cannot join paths to a non-existent directory."
             )
         joined_path = self.dir_path.rstrip("/") + "/" + "/".join(paths)
@@ -1608,11 +1670,11 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the data path is not set, indicating that there is no file to get a suffix from.
         """
         if not self.data_path:
-            raise ValueError(
+            raise FileSystemSetUpError(
                 "Data path is not set. Cannot get suffix of a non-existent file."
             )
 
@@ -1641,26 +1703,28 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemSetUpError``
             If the path_type specified is not 'dir' or 'data', or if the corresponding
             path is not set.
+        ``PathTypeError``
+            If the path_type specified is not 'dir' or 'data'.
         """
         if path_type == "dir":
             if not self.dir_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Directory path is not set. Cannot get stem of a non-existent directory."
                 )
             path_part = urlsplit(self.dir_path).path
             return PurePosixPath(path_part).stem
         elif path_type == "data":
             if not self.data_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot get stem of a non-existent file."
                 )
             path_part = urlsplit(self.data_path).path
             return PurePosixPath(path_part).stem
         else:
-            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
+            raise PathTypeError("path_type value is invalid. Expected 'dir' or 'data'.")
 
     def write_text(
         self,
@@ -1682,15 +1746,17 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
-            If the data path is not set or if the file suffix is not .yaml or .yml.
+        ``FileSystemSetUpError``
+            If the data path is not set.
+        ``TypeError``
+            If the file suffix is not .yaml or .yml.
         """
         if not self.data_path:
-            raise ValueError("Data path is not set. Cannot write text.")
+            raise FileSystemSetUpError("Data path is not set. Cannot write text.")
 
         suffix = self.suffix()
         if suffix not in (".yaml", ".yml"):
-            raise ValueError(
+            raise TypeError(
                 f"The 'write_text' method only supports .yaml and .yml files. Got: {suffix}"
             )
 
@@ -1724,26 +1790,27 @@ class S3FileSystem:
 
         Raises
         ------
-        ``ValueError``
-            If the path_type specified is not 'dir' or 'data', or if the corresponding
-            path is not set.
+        ``FileSystemSetUpError``
+            If data_path or dir_path is not set.
+        ``PathTypeError``
+            If the path_type specified is not 'dir' or 'data'.
         """
         if path_type == "dir":
             if not self.dir_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Directory path is not set. Cannot get parent of a non-existent directory."
                 )
             path_part = urlsplit(self.dir_path).path
             return str(PurePosixPath(path_part).parent)
         elif path_type == "data":
             if not self.data_path:
-                raise ValueError(
+                raise FileSystemSetUpError(
                     "Data path is not set. Cannot get parent of a non-existent file."
                 )
             path_part = urlsplit(self.data_path).path
             return str(PurePosixPath(path_part).parent)
         else:
-            raise ValueError("path_type value is invalid. Expected 'dir' or 'data'.")
+            raise PathTypeError("path_type value is invalid. Expected 'dir' or 'data'.")
 
     def _persist_text_to_s3(self, content, encoding="utf-8", overwrite=True):
         """
@@ -1828,12 +1895,12 @@ class FileSystemFactory:
 
         Raises
         ------
-        ``ValueError``
+        ``FileSystemError``
             If no registered file system class is found for the given prefix.
         """
         fs_class = cls._registry.get(setup.prefix)
         if not fs_class:
-            raise ValueError(
+            raise FileSystemError(
                 f"No registered file system class for prefix: {setup.prefix}"
             )
         return fs_class(setup)
@@ -1912,17 +1979,17 @@ class S3YamlWriter(TextIOBase):
 
     def write(self, text: str) -> int:
         if self._closed:
-            raise ValueError("Cannot write to a closed S3YamlWriter.")
+            raise S3WritingError("Cannot write to a closed S3YamlWriter.")
         return self._buffer.write(text)
 
     def writelines(self, lines) -> None:
         if self._closed:
-            raise ValueError("Cannot write to a closed S3YamlWriter.")
+            raise S3WritingError("Cannot write to a closed S3YamlWriter.")
         self._buffer.writelines(lines)
 
     def flush(self) -> None:
         if self._closed:
-            raise ValueError("Cannot flush a closed S3YamlWriter.")
+            raise S3WritingError("Cannot flush a closed S3YamlWriter.")
         return None
 
     def close(self) -> None:
@@ -1944,7 +2011,7 @@ class S3YamlWriter(TextIOBase):
 
     def __enter__(self):
         if self._closed:
-            raise ValueError("Cannot re-enter a closed S3YamlWriter.")
+            raise S3WritingError("Cannot re-enter a closed S3YamlWriter.")
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

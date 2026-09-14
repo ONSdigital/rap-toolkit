@@ -15,6 +15,7 @@ from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
 from onsrap.warnings import StageConfigurationWarning
 
 from .errors import (
+    PathTypeError,
     PipelineConfigurationError,
     StageExecutionError,
     StageLoadError,
@@ -237,7 +238,7 @@ class ExecutionContext:
                         f"object. It returns {path} Please check your file system type."
                     )
                 return path
-            raise ValueError("path_type must be path or uri")
+            raise PathTypeError("path_type must be path or uri")
 
         raise PipelineConfigurationError(
             "Please parse a run directory to the ExecutionContext."
