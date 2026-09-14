@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from onsrap.errors import FileSystemSetUpError
+from onsrap.errors import FileSystemSetUpError, PathTypeError
 from onsrap.file_system_setup import (
     FileSystemFactory,
     FileSystemSetUp,
@@ -39,16 +39,12 @@ def s3_file_not_real():
         prefix="s3a://",
         root=MY_BUCKET,
         workspace_path="test_workspace",
-        file_name="test_file.csv",
+        file_name="not_a_test_file.csv",
         spark_session=SPARK,
     )
 
 
 class TestFileSystemSetUp:
-    def test_s3_file_system_creation(self, s3_file_real):
-        s3_fs = FileSystemFactory.create(s3_file_real)
-        assert isinstance(s3_fs, S3FileSystem)
-
     def test_create_uri(self, s3_file_real):
         """
         Test that checks all possible routes for uri creation based on
@@ -269,3 +265,65 @@ class TestFileSystemSetUp:
 
         parts = FileSystemSetUp._uri_to_parts(file_uri, type="dir")
         assert parts[3] is None
+
+
+class TestS3FileSystem:
+    def test_s3_file_system_creation(self, s3_file_real):
+        """
+        Tests that the FileSystemFactory correctly creates an S3FileSystem object
+        when provided with a FileSystemSetUp object that has an S3 URI.
+        """
+        s3_fs = FileSystemFactory.create(s3_file_real)
+        assert isinstance(s3_fs, S3FileSystem)
+
+    @pytest.mark.skip(reason="Requires spark and S3 access to run")
+    def test_exists_dir(self, s3_file_real, s3_file_not_real):
+        """
+        Tests that the exists method of S3FileSystem correctly identifies whether
+        a directory exists or not based on the provided FileSystemSetUp object.
+        """
+        s3_fs = FileSystemFactory.create(s3_file_real)
+        assert s3_fs.exists(type="dir") is True
+
+        s3_fs.dir_path = None
+        with pytest.raises(FileSystemSetUpError):
+            s3_fs.exists(type="dir")
+
+        s3_fs_not_real = FileSystemFactory.create(s3_file_not_real)
+        assert s3_fs_not_real.exists(type="dir") is False
+
+    @pytest.mark.skip(reason="Requires spark and S3 access to run")
+    def test_exists_file(self, s3_file_real, s3_file_not_real):
+        """
+        Tests that the exists method of S3FileSystem correctly identifies whether
+        a file exists or not based on the provided FileSystemSetUp object.
+        """
+        s3_fs = FileSystemFactory.create(s3_file_real)
+        assert s3_fs.exists(type="data") is True
+
+        s3_fs.data_path = None
+        with pytest.raises(FileSystemSetUpError):
+            s3_fs.exists(type="data")
+
+        s3_fs_not_real = FileSystemFactory.create(s3_file_not_real)
+        assert s3_fs_not_real.exists(type="data") is False
+
+    @pytest.mark.skip(reason="Requires spark and S3 access to run")
+    def test_exists_errors(self, s3_file_real):
+        """
+        Tests that the exists method of S3FileSystem raises a PathTypeError
+        when provided with an invalid type or errors when the dir_path/data_path
+        is the bucket.
+        """
+        s3_fs = FileSystemFactory.create(s3_file_real)
+
+        with pytest.raises(PathTypeError):
+            s3_fs.exists(type="invalid_type")
+
+        s3_fs.dir_path = f"s3a://{MY_BUCKET}"
+        with pytest.raises(FileSystemSetUpError):
+            s3_fs.exists(type="dir")
+
+        s3_fs.data_path = f"s3a://{MY_BUCKET}"
+        with pytest.raises(FileSystemSetUpError):
+            s3_fs.exists(type="data")
