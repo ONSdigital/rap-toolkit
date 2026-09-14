@@ -1494,8 +1494,37 @@ class S3FileSystem:
         content: str,
         encoding: str = "utf-8",
     ) -> None:
-        raise NotImplementedError(
-            "The 'write_text' method is not implemented for S3FileSystem."
+        """
+        Writes text content to a data file in S3.
+
+        Utilises the private method _persist_text_to_s3 which is utilised in the
+        S3YamlWriter class for consistency.
+
+        Parameters
+        ----------
+        ``content`` : str
+            The text content to write to the data file.
+        ``encoding`` : str, optional
+            The encoding to use for writing the text, by default "utf-8".
+
+        Raises
+        ------
+        ``ValueError``
+            If the data path is not set or if the file suffix is not .yaml or .yml.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot write text.")
+
+        suffix = self.suffix()
+        if suffix not in (".yaml", ".yml"):
+            raise ValueError(
+                f"The 'write_text' method only supports .yaml and .yml files. Got: {suffix}"
+            )
+
+        self._persist_text_to_s3(
+            content=content,
+            encoding=encoding,
+            overwrite=True,
         )
 
     def parent(
