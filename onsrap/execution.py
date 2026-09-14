@@ -107,6 +107,19 @@ class ExecutionContext:
         self.variables[result.name] = result.outputs
         return result
 
+    def log(self, message: str, **kwargs: Any) -> None:
+        """
+        Wrapper function for exposing the Pipeline Logger within the ExecutionContext for custom event logging within Stage scripts.
+
+        Parameters
+        ----------
+        ``message`` : str
+            The main description of the event to be logged.
+        ``**kwargs`` : Any
+            Additional information to be recorded in the log record.
+        """
+        self.logger.event(message, **kwargs)
+
     def result_for(self, stage_name: str) -> StageResult | None:
         """
         Getter function that returns the stage_results for a specific ``Stage``.

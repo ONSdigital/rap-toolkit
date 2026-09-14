@@ -144,9 +144,7 @@ class Logger:
             Additional information to be recorded in the log record.
         """
         if kwargs:
-            self._logger.info(
-                "%s | %s", message, json.dumps(kwargs, default=str, sort_keys=True)
-            )
+            self._logger.info("%s | %s", message, json.dumps(kwargs, default=str))
         else:
             self._logger.info(message)
 
