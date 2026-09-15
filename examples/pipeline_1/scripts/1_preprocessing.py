@@ -5,6 +5,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+from onsrap import ExecutionContext
+
 
 def load_orders(csv_path: Path) -> list[dict[str, str]]:
     with csv_path.open(newline="", encoding="utf-8") as handle:
@@ -87,7 +89,7 @@ def build_summary(
     }
 
 
-def main(context=None) -> dict[str, object]:
+def main(context: ExecutionContext = None) -> dict[str, object]:
     data_root = context.get_data_dir()
     output_root = context.resolve_output_root()
     raw_path = context.resolve_given_path(
