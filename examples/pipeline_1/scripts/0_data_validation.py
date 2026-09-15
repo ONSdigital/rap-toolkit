@@ -4,6 +4,8 @@ import csv
 import json
 from pathlib import Path
 
+from onsrap import ExecutionContext
+
 REQUIRED_COLUMNS = (
     "order_id",
     "customer_name",
@@ -84,7 +86,7 @@ def write_report(report_path: Path, report: dict[str, object]) -> None:
     )
 
 
-def main(context=None) -> dict[str, object]:
+def main(context: ExecutionContext = None) -> dict[str, object]:
     data_root = context.get_data_dir(path_type="path")
     output_root = context.resolve_output_root(path_type="path")
     raw_path = data_root / "orders.csv"
