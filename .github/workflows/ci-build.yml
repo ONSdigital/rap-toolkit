@@ -3,8 +3,6 @@ name: Build
 on:
   push:
     branches: ["release_staging"]
-  pull_request:
-    types: [ready_for_review]
   workflow_dispatch:
 
 jobs:

@@ -2,9 +2,7 @@ name: Type Check
 
 on:
   push:
-    branches: ["main", "release_staging"]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ["main", "development", "release_staging"]
   workflow_dispatch:
 
 jobs:
