@@ -45,6 +45,10 @@ def s3(aws_credentials):
 
 class TestS3FunctionsExists:
     def test_exists(self, s3_file_system, s3):
+        """
+        Tests that the exists method correctly identifies the
+        existence of a file and a directory in the mocked S3 file system.
+        """
         s3.create_bucket(Bucket="my-test-bucket")
         s3.put_object(
             Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"Test content"
@@ -54,12 +58,20 @@ class TestS3FunctionsExists:
         assert s3_file_system.exists(type="dir") is True
 
     def test_not_exists(self, s3_file_system, s3):
+        """
+        Tests that the exists method correctly identifies the non-existence of a
+        file and a directory in the mocked S3 file system.
+        """
         s3.create_bucket(Bucket="my-test-bucket")
 
         assert s3_file_system.exists(type="data") is False
         assert s3_file_system.exists(type="dir") is False
 
     def test_file_not_exists_dir_exists(self, s3_file_system, s3):
+        """
+        Tests that the exists method correctly identifies non-existence of a file
+        and existence of a directory in the mocked S3 file system.
+        """
         s3.create_bucket(Bucket="my-test-bucket")
         s3.put_object(
             Bucket="my-test-bucket",
@@ -69,17 +81,28 @@ class TestS3FunctionsExists:
         assert s3_file_system.exists(type="data") is False
         assert s3_file_system.exists(type="dir") is True
 
-    def test_exists_invalid_type(self, s3_file_system, s3):
+    def test_exists_invalid_type(self, s3_file_system):
+        """
+        Tests that the exists method raises a ValueError when an invalid type is specified.
+        """
         with pytest.raises(ValueError):
             s3_file_system.exists(type="invalid_type")
 
-    def test_exists_error_typing(self, s3_file_system, s3):
+    def test_exists_error_typing(self, s3_file_system):
+        """
+        Tests that the exists method raises a ClientError when there is an error
+        accessing the S3 file system.
+        """
         import botocore.exceptions
 
         with pytest.raises(botocore.exceptions.ClientError):
             s3_file_system.exists(type="data")
 
     def test_no_file_name_error(self, s3):
+        """
+        Tests that a Value error is raised by the exists method when the file_name is
+        None and a data path has been requested.
+        """
         setup = FileSystemSetUp(
             prefix="s3://",
             root="my-test-bucket",
