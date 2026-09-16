@@ -123,7 +123,11 @@ def write_report(report, output_path):
 def main(context):
     # Read in processed data from stage "1_derive_vars"
     data_loc = context.resolve_given_path(
-        "1_derive_vars", "output_location", "orders_prepped.csv", context.get_data_dir()
+        "1_derive_vars",
+        "output_location",
+        "orders_prepped.csv",
+        context.get_data_dir(path_type="path"),
+        path_type="path",
     )
     orders = pd.read_csv(data_loc)
 
@@ -145,7 +149,7 @@ def main(context):
     curate_report(report, values)
 
     # Calculate the output location for the final report and write to it
-    output_path = context.resolve_output_root() / "order_analysis.md"
+    output_path = context.resolve_output_root(path_type="path") / "order_analysis.md"
     write_report(report, output_path)
 
     return {

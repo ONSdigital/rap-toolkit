@@ -36,11 +36,11 @@ def main(context):
     config = context.get_stage_config("0_clean_data")
 
     # Calculate location for run outputs
-    output_root = context.resolve_output_root()
+    output_root = context.resolve_output_root(path_type="path")
     full_output_location = output_root / "orders_cleaned.csv"
 
     # Calculate location of data input
-    data_dir = context.get_data_dir()
+    data_dir = context.get_data_dir(path_type="path")
     orders = pd.read_csv(data_dir / "orders.csv")
 
     # Source variable lists from stage configuration
