@@ -43,7 +43,7 @@ def s3(aws_credentials):
         yield boto3.client("s3")
 
 
-class TestS3Functions:
+class TestS3FunctionsExists:
     def test_exists(self, s3_file_system, s3):
         s3.create_bucket(Bucket="my-test-bucket")
         s3.put_object(

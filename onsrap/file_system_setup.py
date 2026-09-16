@@ -47,6 +47,7 @@ class FileSystemSetUp:
     root: str = str(Path.cwd().resolve())
     workspace_path: Optional[str] = None
     file_name: Optional[str] = None
+    ssl_file: Optional[str] = None
 
     def create_uri(self) -> str:
         """
@@ -68,7 +69,9 @@ class FileSystemSetUp:
         return f"{self.prefix}{root}"
 
     @classmethod
-    def from_str(cls, uri: str, path_type: str = "file"):
+    def from_str(
+        cls, uri: str, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from a URI string.
 
@@ -89,11 +92,17 @@ class FileSystemSetUp:
             normalised_uri, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            ssl_file=ssl_file,
         )
 
     @classmethod
-    def from_path(cls, path: Path, path_type: str = "file"):
+    def from_path(
+        cls, path: Path, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from a Path object.
 
@@ -114,11 +123,17 @@ class FileSystemSetUp:
             normalised_path, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            ssl_file=ssl_file,
         )
 
     @classmethod
-    def from_any(cls, path: Any, path_type: str = "file"):
+    def from_any(
+        cls, path: Any, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from either a URI string or a Path object.
 
@@ -135,9 +150,9 @@ class FileSystemSetUp:
             The derived FileSystemSetUp object.
         """
         if isinstance(path, str):
-            return cls.from_str(path, path_type)
+            return cls.from_str(path, path_type, ssl_file=ssl_file)
         elif isinstance(path, Path):
-            return cls.from_path(path, path_type)
+            return cls.from_path(path, path_type, ssl_file=ssl_file)
         elif path is None:
             raise ValueError(
                 "You cannot create a FileSystemSetUp instance from a "
@@ -150,17 +165,20 @@ class FileSystemSetUp:
             )
 
     @classmethod
-    def file_system_setup_factory(cls, input: Any, path_type: str):
+    def file_system_setup_factory(
+        cls, input: Any, path_type: str, ssl_file: Optional[str] = None
+    ):
         if isinstance(input, FileSystemSetUp):
             new_fs_setup = FileSystemSetUp(
                 prefix=input.prefix,
                 root=input.root,
                 workspace_path=input.workspace_path,
                 file_name=input.file_name,
+                ssl_file=input.ssl_file,
             )
             return new_fs_setup
         elif isinstance(input, (str, Path)):
-            return cls.from_any(input, path_type=path_type)
+            return cls.from_any(input, path_type=path_type, ssl_file=ssl_file)
         else:
             raise TypeError(
                 f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
@@ -916,6 +934,7 @@ class S3FileSystem:
             True if the path exists, False otherwise.
         """
         s3 = boto3.client("s3")
+        # raz_client.configure_ranger_raz(s3, self.setup.ssl_file)
         if type == "data":
             if not self.data_path:
                 raise ValueError(

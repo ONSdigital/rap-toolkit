@@ -152,6 +152,7 @@ class PipelineConfig:
     python_executable: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
     overwrite: bool = False
+    ssl_file: str | None = None
 
     def __post_init__(self) -> None:
         """
@@ -305,6 +306,7 @@ class PipelineConfig:
 
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
         overwrite = PipelineConfig._to_bool(payload.pop("overwrite", False))
+        ssl_file = payload.pop("ssl_file", None)
         if isinstance(raw_subprocess_fallback, str):
             warnings.warn(
                 "allow_subprocess_fallback should be a boolean, not a string. "
@@ -336,6 +338,7 @@ class PipelineConfig:
             allow_subprocess_fallback=allow_subprocess_fallback,
             overwrite=overwrite,
             python_executable=python_executable,
+            ssl_file=ssl_file,
             metadata=metadata,
         )
 
@@ -404,6 +407,7 @@ class PipelineConfig:
             "data_dir": str(self.data_dir.create_uri()),
             "allow_subprocess_fallback": self.allow_subprocess_fallback,
             "python_executable": self.python_executable,
+            "ssl_file": self.ssl_file,
         }
         data.update(self.metadata)
         return data
