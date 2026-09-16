@@ -77,7 +77,7 @@ Contributors have some additional requirements - please see our [contributing gu
 
 ## Installing the package
 
-**Whilst in the root folder, in a terminal, you can install this package and its**
+**Whilst in the root folder**, in a terminal, you can install this package and its
 Python dependencies using:
 
 ```shell
