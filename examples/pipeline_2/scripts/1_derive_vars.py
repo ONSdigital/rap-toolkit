@@ -64,7 +64,11 @@ def main(context=None):
     # Source data path for previous stage results which are required
     # for this stage and read those in
     data_path = context.resolve_given_path(
-        "0_clean_data", "output_location", "orders_cleaned.csv", context.get_data_dir()
+        "0_clean_data",
+        "output_location",
+        "orders_cleaned.csv",
+        context.get_data_dir(path_type="path"),
+        path_type="path",
     )
     df = pd.read_csv(data_path)
 
@@ -82,7 +86,7 @@ def main(context=None):
     df = profit_per_order(df)
 
     # Save results to output location calculated based on run_directory
-    output_root = context.resolve_output_root()
+    output_root = context.resolve_output_root(path_type="path")
     df.to_csv(output_root / "orders_prepped.csv", index=False)
 
     return {
