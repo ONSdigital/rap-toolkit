@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath
 from typing import IO, Any, Optional, Protocol, Type
 from urllib.parse import unquote, urlparse, urlsplit
 
@@ -1111,9 +1111,16 @@ class S3FileSystem:
     def suffix(
         self,
     ) -> str:
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+        """
+        Extracts the suffix of the data_path using PurePath from pathlib.
+
+        This method is suitable as PurePath methods do not require any file
+        system access and can operate on the path string directly.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot get suffix.")
+        purepath_obj = PurePath(self.data_path)
+        return purepath_obj.suffix
 
     def stem(
         self,

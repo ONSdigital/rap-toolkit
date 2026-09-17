@@ -202,3 +202,20 @@ class TestS3FunctionsIsFile:
         # If there is no data_path in the file system
         s3_file_system.data_path = None
         assert s3_file_system.is_file() is False
+
+
+class TestS3FunctionsSuffix:
+    def test_suffix(self, s3_file_system):
+        """
+        Tests that the suffix method correctly extracts the file extension from the data_path.
+        """
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/test.txt"
+        assert s3_file_system.suffix() == ".txt"
+
+    def test_suffix_no_data_path(self, s3_file_system):
+        """
+        Tests that the suffix method raises a ValueError when the data_path is None.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.suffix()
