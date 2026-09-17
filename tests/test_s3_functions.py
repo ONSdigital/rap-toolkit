@@ -219,3 +219,27 @@ class TestS3FunctionsSuffix:
         s3_file_system.data_path = None
         with pytest.raises(ValueError):
             s3_file_system.suffix()
+
+
+class TestS3FunctionsStem:
+    def test_stem(self, s3_file_system):
+        """
+        Tests that the stem method correctly extracts the file name without extension
+        from the data_path and dir_path.
+        """
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/test.txt"
+        assert s3_file_system.stem(type="data") == "test"
+        s3_file_system.dir_path = "s3://my-test-bucket/test_folder"
+        assert s3_file_system.stem(type="dir") == "test_folder"
+
+    def test_stem_no_data_path(self, s3_file_system):
+        """
+        Tests that the stem method raises a ValueError when the data_path is None.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.stem(type="data")
+
+        s3_file_system.dir_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.stem(type="dir")

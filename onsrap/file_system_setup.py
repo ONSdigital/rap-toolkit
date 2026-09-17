@@ -1126,9 +1126,36 @@ class S3FileSystem:
         self,
         type: str,  # dir or data
     ) -> str:
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+        """
+        Extracts the stem of the specified path type using PurePath from pathlib.
+
+        Parameters
+        ----------
+        ``type`` : str
+            The type of path ('dir' or 'data') for which to extract the stem.
+
+        Returns
+        -------
+        ``str``
+            The stem of the specified path.
+
+        Raises
+        ------
+        ``ValueError``
+            If the specified path is not set or if an invalid type is specified.
+        """
+        if type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot get stem.")
+            purepath_obj = PurePath(self.data_path)
+            return purepath_obj.stem
+        elif type == "dir":
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot get stem.")
+            purepath_obj = PurePath(self.dir_path)
+            return purepath_obj.stem
+        else:
+            raise ValueError(f"Invalid type specified: {type}")
 
     def write_text(
         self,
