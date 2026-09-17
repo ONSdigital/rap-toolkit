@@ -885,7 +885,9 @@ class S3FileSystem:
         self.setup = setup
         root = setup.root
         self.dir_path: str = (
-            (setup.workspace_path + "/") if setup.workspace_path else root
+            (setup.prefix + root + "/" + setup.workspace_path + "/")
+            if setup.workspace_path
+            else (setup.prefix + root + "/")
         )
         self.data_path: str | None = (
             (self.dir_path + setup.file_name) if setup.file_name else None
@@ -978,9 +980,30 @@ class S3FileSystem:
         self,
         type: str,  # dir or data
     ) -> bool:
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+        """
+        Returns True if the path contains the prefix and the bucket and False
+        otherwise.
+
+        All file paths in S3 are absolute paths but this method checks that the path
+        continues past the bucket name to ensure that the path is not just the bucket
+        itself.
+        """
+        if type == "dir":
+            if self.dir_path:
+                return self.dir_path.startswith(f"s3://{self.setup.root}/")
+            else:
+                raise ValueError(
+                    "Directory path is not set. Cannot check if it is absolute."
+                )
+
+        elif type == "data":
+            if self.data_path:
+                return self.data_path.startswith(f"s3://{self.setup.root}/")
+            else:
+                raise ValueError(
+                    "Data path is not set. Cannot check if it is absolute."
+                )
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
 
     def mkdir(
         self,

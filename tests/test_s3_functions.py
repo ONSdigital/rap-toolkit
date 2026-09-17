@@ -113,3 +113,49 @@ class TestS3FunctionsExists:
         s3.create_bucket(Bucket="my-test-bucket")
         with pytest.raises(ValueError):
             s3_file_system.exists(type="data")
+
+
+class TestS3FunctionsIsAbsolute:
+    def test_is_absolute(self, s3_file_system):
+        """
+        Tests that the is_absolute method correctly identifies an absolute path.
+        """
+        assert s3_file_system.is_absolute(type="dir") is True
+        assert s3_file_system.is_absolute(type="data") is True
+
+    def test_is_not_absolute(self):
+        """
+        Tests that the is_absolute method correctly identifies a non-absolute path.
+        """
+        setup = FileSystemSetUp(
+            prefix="s3://",
+            root="my-test-bucket",
+            workspace_path="test_folder",
+            file_name="test.txt",
+        )
+        fs_no_absolute = FileSystemFactory.create(setup)
+        fs_no_absolute.dir_path = "s3a://not-a-test-bucket"
+        fs_no_absolute.data_path = "s3a://not-a-test-bucket/test_folder/test.txt"
+        assert fs_no_absolute.is_absolute(type="dir") is False
+        assert fs_no_absolute.is_absolute(type="data") is False
+
+    def test_is_absolute_invalid_type(self, s3_file_system):
+        """
+        Tests that the is_absolute method raises a ValueError when an invalid type is specified.
+        """
+        with pytest.raises(ValueError):
+            s3_file_system.is_absolute(type="invalid_type")
+
+    def test_is_absolute_errors(self, s3_file_system):
+        """
+        Tests that the is_absolute method raises a ValueError when the directory
+        or data paths are None.
+        """
+        s3_file_system.dir_path = None
+        s3_file_system.data_path = None
+
+        with pytest.raises(ValueError):
+            s3_file_system.is_absolute(type="dir")
+
+        with pytest.raises(ValueError):
+            s3_file_system.is_absolute(type="data")
