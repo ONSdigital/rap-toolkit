@@ -114,6 +114,19 @@ class TestS3FunctionsExists:
         with pytest.raises(ValueError):
             s3_file_system.exists(type="data")
 
+    def test_exists_no_key(self, s3_file_system, s3):
+        """
+        Tests that a Value error is raised by the exists method when the data_path is
+        set to the bucket root.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3_file_system.data_path = "s3://my-test-bucket/"
+        with pytest.raises(ValueError):
+            s3_file_system.exists(type="data")
+        s3_file_system.data_path = "s3://my-test-bucket/"
+        with pytest.raises(ValueError):
+            s3_file_system.exists(type="data")
+
 
 class TestS3FunctionsIsAbsolute:
     def test_is_absolute(self, s3_file_system):
@@ -134,8 +147,8 @@ class TestS3FunctionsIsAbsolute:
             file_name="test.txt",
         )
         fs_no_absolute = FileSystemFactory.create(setup)
-        fs_no_absolute.dir_path = "s3a://not-a-test-bucket"
-        fs_no_absolute.data_path = "s3a://not-a-test-bucket/test_folder/test.txt"
+        fs_no_absolute.dir_path = "s3://not-a-test-bucket"
+        fs_no_absolute.data_path = "s3://not-a-test-bucket/test_folder/test.txt"
         assert fs_no_absolute.is_absolute(type="dir") is False
         assert fs_no_absolute.is_absolute(type="data") is False
 
@@ -159,3 +172,33 @@ class TestS3FunctionsIsAbsolute:
 
         with pytest.raises(ValueError):
             s3_file_system.is_absolute(type="data")
+
+
+class TestS3FunctionsIsFile:
+    def test_is_file(self, s3_file_system, s3):
+        """
+        Tests that the is_file method correctly identifies a file in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"Test content"
+        )
+
+        assert s3_file_system.is_file() is True
+
+    def test_is_not_file(self, s3_file_system, s3):
+        """
+        Tests that the is_file method correctly identifies a non-file in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+
+        # If file doesn't exists
+        assert s3_file_system.is_file() is False
+
+        # If the data_path ends with "/"
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/"
+        assert s3_file_system.is_file() is False
+
+        # If there is no data_path in the file system
+        s3_file_system.data_path = None
+        assert s3_file_system.is_file() is False

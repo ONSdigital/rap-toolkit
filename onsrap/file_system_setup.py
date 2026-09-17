@@ -942,8 +942,15 @@ class S3FileSystem:
                 raise ValueError(
                     "Data path is not set. Cannot check existence of data file."
                 )
+            if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.data_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Data path is set to the bucket root. Cannot check existence of data file at bucket root."
+                )
+            key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
             try:
-                s3.head_object(Bucket=self.setup.root, Key=self.data_path)
+                s3.head_object(Bucket=self.setup.root, Key=key)
                 return True
             except botocore.exceptions.ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
@@ -953,7 +960,13 @@ class S3FileSystem:
                     raise
 
         if type == "dir":
-            prefix = self.dir_path
+            if (self.dir_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.dir_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Directory path is set to the bucket root. Cannot check existence of data file at bucket root."
+                )
+            prefix = self.dir_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
 
             try:
                 response = s3.list_objects_v2(
@@ -972,9 +985,25 @@ class S3FileSystem:
     def is_file(
         self,
     ) -> bool:
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+        """
+        Checks if the path provided is a file within the S3 FileSystem.
+
+        If a file name is provided and therefore a data_path is generated, and that
+        data path does not end in a / (indicating a directory), then this method will
+        return True. Also checks whether the file itself already exists.
+
+        Returns
+        -------
+        ``bool``
+            True if the path is a file, False otherwise.
+        """
+        if self.data_path:
+            if self.data_path.endswith("/"):
+                return False
+            else:
+                return bool(self.data_path) and self.exists(type="data")
+        else:
+            return False
 
     def is_absolute(
         self,
