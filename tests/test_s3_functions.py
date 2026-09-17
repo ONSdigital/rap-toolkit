@@ -243,3 +243,33 @@ class TestS3FunctionsStem:
         s3_file_system.dir_path = None
         with pytest.raises(ValueError):
             s3_file_system.stem(type="dir")
+
+
+class TestS3FunctionsJoinPath:
+    def test_join_path(self, s3_file_system):
+        """
+        Tests that the join_path method correctly joins the dir_path and file_name
+        to form a complete data_path.
+        """
+        s3_file_system.dir_path = "s3://my-test-bucket/test_folder"
+        expected_data_path = "s3://my-test-bucket/test_folder/test.txt"
+        assert s3_file_system.join_path("test.txt") == expected_data_path
+
+    def test_join_path_no_dir_path(self, s3_file_system):
+        """
+        Tests that the join_path method raises a ValueError when the dir_path is None.
+        """
+        s3_file_system.dir_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.join_path("test.txt")
+
+    def test_join_path_multiple(self, s3_file_system):
+        """
+        Tests that the join_path method correctly joins the dir_path and file_name
+        to form a complete data_path.
+        """
+        s3_file_system.dir_path = "s3://my-test-bucket/test_folder"
+        expected_data_path = "s3://my-test-bucket/test_folder/test_subfolder/test.txt"
+        assert (
+            s3_file_system.join_path("test_subfolder", "test.txt") == expected_data_path
+        )

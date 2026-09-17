@@ -1040,7 +1040,7 @@ class S3FileSystem:
         exist_ok: bool = True,
     ) -> None:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'mkdir' method is not implemented for S3FileSystem."
         )
 
     def read_text(
@@ -1048,7 +1048,7 @@ class S3FileSystem:
         encoding: Optional[str] = "utf-8",
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'read_text' method is not implemented for S3FileSystem."
         )
 
     def open(
@@ -1057,7 +1057,7 @@ class S3FileSystem:
         encoding: Optional[str] = "utf-8",
     ) -> IO:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'open' method is not implemented for S3FileSystem."
         )
 
     def glob(
@@ -1065,14 +1065,14 @@ class S3FileSystem:
         specific_pattern: str,
     ) -> list[str]:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'glob' method is not implemented for S3FileSystem."
         )
 
     def expand_user(
         self,
     ) -> str:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'expand_user' method is not implemented for S3FileSystem."
         )
 
     def resolve(
@@ -1080,7 +1080,7 @@ class S3FileSystem:
         type: str,  # dir or data
     ) -> str | Path:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'resolve' method is not implemented for S3FileSystem."
         )
 
     def spec_from_file_location(
@@ -1088,7 +1088,7 @@ class S3FileSystem:
         module_name: str,
     ):
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'spec_from_file_location' method is not implemented for S3FileSystem."
         )
 
     def file_handler(
@@ -1097,16 +1097,40 @@ class S3FileSystem:
         encoding: str,
     ):
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'file_handler' method is not implemented for S3FileSystem."
         )
 
     def join_path(
         self,
         *paths: str,
-    ) -> str | Path:
-        raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
-        )
+    ) -> str:
+        """
+        Joins multiple path components into a single slash-separated S3 path.
+
+        This avoids ``PurePath`` because it is platform-specific and would emit
+        backslashes on Windows.
+
+        Parameters
+        ----------
+        ``*paths`` : str
+            The path components to join.
+
+        Returns
+        -------
+        ``str``
+            The joined path as a string.
+
+        Raises
+        ------
+        ``ValueError``
+            If the directory path is not set, indicating that the base path for
+            joining is not available.
+        """
+        if not self.dir_path:
+            raise ValueError("Directory path is not set. Cannot join paths.")
+        joined_paths = [self.dir_path.rstrip("/")]
+        joined_paths.extend(path.strip("/") for path in paths)
+        return "/".join(joined_paths)
 
     def suffix(
         self,
@@ -1163,7 +1187,7 @@ class S3FileSystem:
         encoding: str = "utf-8",
     ) -> None:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'write_text' method is not implemented for S3FileSystem."
         )
 
     def parent(
@@ -1171,7 +1195,7 @@ class S3FileSystem:
         path_type: str,  # dir or data
     ) -> Path:
         raise NotImplementedError(
-            "The 'exists' method is not implemented for S3FileSystem."
+            "The 'parent' method is not implemented for S3FileSystem."
         )
 
 
