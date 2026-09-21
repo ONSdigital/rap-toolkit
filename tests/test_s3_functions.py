@@ -429,3 +429,88 @@ class TestS3FunctionsReadText:
         s3_file_system.data_path = "s3://my-test-bucket/"
         with pytest.raises(ValueError):
             s3_file_system.read_text()
+
+
+class TestS3FunctionsWriteText:
+    def test_write_text(self, s3_file_system, s3):
+        """
+        Tests that the write_text method correctly writes content to a file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        content_to_write = "This is a test content."
+
+        s3_file_system.write_text(content_to_write)
+
+        # Verify that the content was written correctly
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        written_content = response["Body"].read().decode("utf-8")
+        assert written_content == content_to_write
+
+    def test_write_overwriting(self, s3_file_system, s3):
+        """
+        Tests that the write_text method correctly overwrites existing content
+        in a file in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        initial_content = "Initial content."
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/test.txt",
+            Body=initial_content.encode("utf-8"),
+        )
+
+        new_content = "New content to overwrite."
+        s3_file_system.write_text(new_content)
+
+        # Verify that the content was overwritten correctly
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        written_content = response["Body"].read().decode("utf-8")
+        assert written_content == new_content
+
+    def test_write_no_content(self, s3_file_system, s3):
+        """
+        Tests that the write_text method correctly writes an empty string to a file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        empty_content = ""
+
+        s3_file_system.write_text(empty_content)
+
+        # Verify that the content was written correctly
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        written_content = response["Body"].read().decode("utf-8")
+        assert written_content == empty_content
+
+    def test_write_large_files(self, s3_file_system, s3):
+        """
+        Tests that the write_text method correctly writes a large content to a file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        large_content = "B" * 2 * 1024 * 1024  # 2 MB of 'B's
+
+        with s3_file_system.open(mode="w", encoding="utf-8") as file:
+            file.write(large_content)
+
+        # Verify that the content was written correctly
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        written_content = response["Body"].read().decode("utf-8")
+        assert written_content == large_content
+
+    def test_write_text_no_data_path(self, s3_file_system):
+        """
+        Tests that the write_text method raises a ValueError when the data_path is None.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.write_text("Some content")
+
+    def test_write_text_invalid_data_path(self, s3_file_system):
+        """
+        Tests that the write_text method raises a ValueError when the data_path is invalid.
+        """
+        s3_file_system.data_path = "s3://my-test-bucket/"
+        with pytest.raises(ValueError):
+            s3_file_system.write_text("Some content")
