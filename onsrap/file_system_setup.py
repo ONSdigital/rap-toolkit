@@ -1088,9 +1088,16 @@ class S3FileSystem:
         self,
         encoding: Optional[str] = "utf-8",
     ) -> str:
-        raise NotImplementedError(
-            "The 'read_text' method is not implemented for S3FileSystem."
-        )
+        """
+        Reads the content of the file at the data path as text.
+
+        Returns
+        -------
+        ``str``
+            The content of the file.
+        """
+        with self.open(mode="r", encoding=encoding) as file:
+            return file.read()
 
     @contextmanager
     def open(
@@ -1287,9 +1294,18 @@ class S3FileSystem:
         content: str,
         encoding: str = "utf-8",
     ) -> None:
-        raise NotImplementedError(
-            "The 'write_text' method is not implemented for S3FileSystem."
-        )
+        """
+        Writes the given content to the file at the data path as text.
+
+        Parameters
+        ----------
+        ``content`` : str
+            The content to write to the file.
+        ``encoding`` : str, optional
+            The encoding to use when writing the file, by default "utf-8".
+        """
+        with self.open(mode="w", encoding=encoding) as file:
+            file.write(content)
 
     def parent(
         self,
