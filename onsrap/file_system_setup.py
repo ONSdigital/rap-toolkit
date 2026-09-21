@@ -1091,9 +1091,21 @@ class S3FileSystem:
         self,
         type: str,  # dir or data
     ) -> str | Path:
-        raise NotImplementedError(
-            "The 'resolve' method is not implemented for S3FileSystem."
-        )
+        if type == "dir":
+            if self.dir_path and self.dir_path.startswith(f"s3://{self.setup.root}/"):
+                return self.dir_path
+            else:
+                raise ValueError(
+                    "Directory path is not set or not an absolute S3 path."
+                )
+
+        elif type == "data":
+            if self.data_path and self.data_path.startswith(f"s3://{self.setup.root}/"):
+                return self.data_path
+            else:
+                raise ValueError("Data path is not set or not an absolute S3 path.")
+
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
 
     def spec_from_file_location(
         self,
