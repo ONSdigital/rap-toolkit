@@ -273,3 +273,56 @@ class TestS3FunctionsJoinPath:
         assert (
             s3_file_system.join_path("test_subfolder", "test.txt") == expected_data_path
         )
+
+
+class TestS3FunctionsResolve:
+    def test_resolve(self, s3_file_system):
+        """
+        Tests that the resolve method correctly returns the absolute path of the data_path.
+        """
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/test.txt"
+        assert s3_file_system.resolve(type="data") == s3_file_system.data_path
+
+        s3_file_system.dir_path = "s3://my-test-bucket/test_folder/"
+        assert s3_file_system.resolve(type="dir") == s3_file_system.dir_path
+
+    def test_resolve_no_data_path(self, s3_file_system):
+        """
+        Tests that the resolve method raises a ValueError when the data_path is None
+        or when it does not contain the prefix.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="data")
+
+        s3_file_system.data_path = "my-test-bucket/test_folder/test.txt"
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="data")
+
+        s3_file_system.data_path = "s3://test_folder/test.txt"
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="data")
+
+    def test_resolve_no_dir_path(self, s3_file_system):
+        """
+        Tests that the resolve method raises a ValueError when the dir_path is None
+        or when it does not contain the prefix.
+        """
+        s3_file_system.dir_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="dir")
+
+        s3_file_system.dir_path = "my-test-bucket/test_folder/"
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="dir")
+
+        s3_file_system.dir_path = "s3://test_folder/"
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="dir")
+
+    def test_resolve_invalid_type(self, s3_file_system):
+        """
+        Tests that the resolve method raises a ValueError when an invalid type is specified.
+        """
+        with pytest.raises(ValueError):
+            s3_file_system.resolve(type="invalid_type")
