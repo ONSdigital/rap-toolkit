@@ -1,3 +1,4 @@
+import botocore
 import pytest
 from moto import mock_aws
 
@@ -514,3 +515,127 @@ class TestS3FunctionsWriteText:
         s3_file_system.data_path = "s3://my-test-bucket/"
         with pytest.raises(ValueError):
             s3_file_system.write_text("Some content")
+
+
+class TestS3FunctionsOpen:
+    def test_open_read_mode(self, s3_file_system, s3):
+        """
+        Tests that the open method correctly opens a file in read mode
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        content_to_write = "This is a test content."
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/test.txt",
+            Body=content_to_write.encode("utf-8"),
+        )
+
+        with s3_file_system.open(mode="r", encoding="utf-8") as file:
+            read_content = file.read()
+            assert read_content == content_to_write
+
+    def test_open_write_mode(self, s3_file_system, s3):
+        """
+        Tests that the open method correctly opens a file in write mode
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        content_to_write = "This is a test content."
+
+        with s3_file_system.open(mode="w", encoding="utf-8") as file:
+            file.write(content_to_write)
+
+        # Verify that the content was written correctly
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        written_content = response["Body"].read().decode("utf-8")
+        assert written_content == content_to_write
+
+    def test_open_readlines(self, s3_file_system, s3):
+        """
+        Tests that the open method correctly opens a file in read mode
+        and reads lines one by one in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        content_to_write = "Line 1\nLine 2\nLine 3"
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/test.txt",
+            Body=content_to_write.encode("utf-8"),
+        )
+
+        with s3_file_system.open(mode="r", encoding="utf-8") as file:
+            lines = file.readlines()
+            assert lines == ["Line 1\n", "Line 2\n", "Line 3"]
+
+    def test_open_text_wrapper_encoding_property(self, s3_file_system, s3):
+        """
+        Tests that the file object returned in text mode has the encoding property.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"Test content"
+        )
+
+        # Test default encoding
+        with s3_file_system.open(mode="r") as f:
+            assert hasattr(f, "encoding")
+            assert f.encoding in ["utf-8", "UTF-8"]  # Handle case variations
+
+        # Test custom encoding
+        with s3_file_system.open(mode="r", encoding="latin-1") as f:
+            assert hasattr(f, "encoding")
+            assert f.encoding.lower() == "latin-1"
+
+    def test_open_seek_tell_binary_mode(self, s3_file_system, s3):
+        """
+        Tests that seek and tell operations work correctly in binary mode.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        test_content = b"0123456789"
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/test.txt", Body=test_content
+        )
+
+        with s3_file_system.open(mode="rb") as f:
+            # Read first 5 bytes
+            chunk1 = f.read(5)
+            assert chunk1 == b"01234"
+
+            # Check current position
+            pos = f.tell()
+            assert pos == 5
+
+            # Seek back to start
+            f.seek(0)
+            pos = f.tell()
+            assert pos == 0
+
+            # Verify we can read from start again
+            chunk_from_start = f.read(3)
+            assert chunk_from_start == b"012"
+
+    def test_open_context_manager_upload_timing(self, s3_file_system, s3):
+        """
+        Tests that content is only uploaded to S3 after the context manager exits.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+
+        # Verify file doesn't exist yet
+        with pytest.raises(
+            (FileNotFoundError, botocore.exceptions.ClientError)
+        ):  # FileNotFoundError or NoSuchKey error
+            s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+
+        # Open and write within context
+        with s3_file_system.open(mode="w") as f:
+            f.write("Content being written")
+
+            # File should still not exist in S3 while inside context
+            with pytest.raises((FileNotFoundError, botocore.exceptions.ClientError)):
+                s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+
+        # After exiting context, file should exist
+        response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
+        content = response["Body"].read().decode("utf-8")
+        assert content == "Content being written"
