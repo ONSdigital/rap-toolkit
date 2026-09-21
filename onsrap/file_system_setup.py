@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from pathlib import Path, PurePath, PurePosixPath
 from tempfile import SpooledTemporaryFile
-from typing import IO, Any, ContextManager, Iterator, Optional, Protocol, Type, cast
+from typing import IO, Any, ContextManager, Generator, Optional, Protocol, Type, cast
 from urllib.parse import unquote, urlparse, urlsplit
 
 import boto3
@@ -1097,7 +1097,7 @@ class S3FileSystem:
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> Iterator[IO]:
+    ) -> Generator[IO]:
         if mode not in {"r", "rb", "w", "wb"}:
             raise ValueError("Supported modes are: 'r', 'rb', 'w', 'wb'.")
 
