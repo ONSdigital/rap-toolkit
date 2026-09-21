@@ -326,3 +326,106 @@ class TestS3FunctionsResolve:
         """
         with pytest.raises(ValueError):
             s3_file_system.resolve(type="invalid_type")
+
+
+class TestS3FunctionsReadText:
+    def test_read_text(self, s3_file_system, s3):
+        """
+        Tests that the read_text method correctly reads the content of a file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"Test content"
+        )
+
+        content = s3_file_system.read_text()
+        assert content == "Test content"
+
+    def test_read_text_blank_files(self, s3_file_system, s3):
+        """
+        Tests that the read_text method correctly reads the content of a file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"")
+
+        content = s3_file_system.read_text()
+        assert content == ""
+
+    def test_read_text_diff_encoding(self, s3_file_system, s3):
+        """
+        Tests that the read_text method correctly reads the content of a file
+        in the mocked S3 file system with a different encoding than the default "utf-8".
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/test.txt",
+            Body="Test content with special char: ñ".encode("latin-1"),
+        )
+
+        content = s3_file_system.read_text(encoding="latin-1")
+        assert content == "Test content with special char: ñ"
+
+    def test_read_text_no_file(self, s3_file_system, s3):
+        """
+        Tests that the read_text method raises a ClientError when trying to read
+        a non-existent file in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+
+        with pytest.raises(FileNotFoundError):
+            s3_file_system.read_text()
+
+    def test_read_text_no_data_path(self, s3_file_system):
+        """
+        Tests that the read_text method raises a ValueError when the data_path is None.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.read_text()
+
+    def test_non_matching_encoding(self, s3_file_system, s3):
+        """
+        Tests that the read_text method raises a UnicodeDecodeError when trying to read
+        a file with an encoding that does not match the file's actual encoding.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/test.txt",
+            Body="Test content with special char: ñ".encode("latin-1"),
+        )
+
+        with pytest.raises(UnicodeDecodeError):
+            s3_file_system.read_text(encoding="utf-8")
+
+    def test_read_text_large_file(self, s3_file_system, s3):
+        """
+        Tests that the read_text method correctly reads the content of a large file
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        large_content = "A" * 2 * 1024 * 1024  # 2 MB of 'A's
+        s3.put_object(
+            Bucket="my-test-bucket",
+            Key="test_folder/large_test.txt",
+            Body=large_content.encode("utf-8"),
+        )
+
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/large_test.txt"
+        content = s3_file_system.read_text()
+        assert content == large_content
+
+    def test_read_text_invalid_data_path(self, s3_file_system, s3):
+        """
+        Tests that the read_text method raises a ValueError when the data_path is invalid.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/test.txt", Body=b"Test content"
+        )
+        s3_file_system.data_path = "s3://my-test-bucket/"
+        with pytest.raises(ValueError):
+            s3_file_system.read_text()
