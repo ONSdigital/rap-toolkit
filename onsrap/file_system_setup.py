@@ -872,7 +872,6 @@ class LocalFileSystem:
 
 
 class S3FileSystem:
-    # TODO: add FileSystem inheritance once all methods are populated
     def __init__(self, setup: FileSystemSetUp):
         """
         Initialize the S3FileSystem with the provided setup.
@@ -1071,9 +1070,15 @@ class S3FileSystem:
     def expand_user(
         self,
     ) -> str:
-        raise NotImplementedError(
-            "The 'expand_user' method is not implemented for S3FileSystem."
-        )
+        """
+        This method is not applicable for S3FileSystem as there is no concept of a user
+        home directory in S3. Therefore, when called, it will return the data path as is.
+
+        If there is no data path, it will return the directory path. This is a
+        placeholder to maintain interface consistency with other file system
+        implementations, but it does not perform any expansion.
+        """
+        return self.data_path if self.data_path else self.dir_path
 
     def resolve(
         self,
@@ -1272,3 +1277,4 @@ class FileSystemFactory:
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
 FileSystemFactory.register("s3://", S3FileSystem)
+FileSystemFactory.register("s3a://", S3FileSystem)
