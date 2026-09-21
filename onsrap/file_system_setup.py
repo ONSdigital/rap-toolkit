@@ -919,6 +919,39 @@ class S3FileSystem:
         """
         return f"S3FileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
 
+    def _get_s3_client(self):
+        """
+        Create and return an S3 client using boto3.
+
+        Returns
+        -------
+        ``boto3.client``
+            An S3 client for interacting with the S3 service.
+        """
+        s3 = boto3.client("s3")
+        # raz_client.configure_ranger_raz(s3, self.setup.ssl_file)
+        return s3
+
+    def _get_s3_bucket_key(self):
+        """
+        Extract the bucket name and key from the data path.
+
+        Returns
+        -------
+        ``tuple[str, str]``
+            A tuple containing the bucket name and key.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot extract bucket and key.")
+        if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
+            self.data_path == f"{self.setup.prefix}{self.setup.root}"
+        ):
+            raise ValueError(
+                "Data path is set to the bucket root. Cannot extract bucket and key."
+            )
+        key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+        return self.setup.root, key
+
     def exists(
         self,
         type: str,  # dir or data
@@ -934,8 +967,7 @@ class S3FileSystem:
         ``bool``
             True if the path exists, False otherwise.
         """
-        s3 = boto3.client("s3")
-        # raz_client.configure_ranger_raz(s3, self.setup.ssl_file)
+        s3 = self._get_s3_client()
         if type == "data":
             if not self.data_path:
                 raise ValueError(
@@ -947,9 +979,9 @@ class S3FileSystem:
                 raise ValueError(
                     "Data path is set to the bucket root. Cannot check existence of data file at bucket root."
                 )
-            key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+            bucket, key = self._get_s3_bucket_key()
             try:
-                s3.head_object(Bucket=self.setup.root, Key=key)
+                s3.head_object(Bucket=bucket, Key=key)
                 return True
             except botocore.exceptions.ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
