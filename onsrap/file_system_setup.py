@@ -1,11 +1,14 @@
 import glob
 import importlib.util
+import io
 import logging
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
 from pathlib import Path, PurePath, PurePosixPath
-from typing import IO, Any, Optional, Protocol, Type
+from tempfile import SpooledTemporaryFile
+from typing import IO, Any, ContextManager, Iterator, Optional, Protocol, Type, cast
 from urllib.parse import unquote, urlparse, urlsplit
 
 import boto3
@@ -413,7 +416,7 @@ class FileSystem(Protocol):
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> IO: ...
+    ) -> ContextManager[IO]: ...
 
     def glob(
         self,
@@ -644,7 +647,7 @@ class LocalFileSystem:
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> IO:
+    ) -> ContextManager[IO]:
         """
         Open the data file in the local file system.
 
@@ -657,8 +660,8 @@ class LocalFileSystem:
 
         Returns
         -------
-        ``IO``
-            A file object corresponding to the opened file.
+        ``ContextManager[IO]``
+            A context manager yielding a file object corresponding to the opened file.
         """
         if not self.data_path:
             raise ValueError("Data path is not set. Cannot open a file.")
@@ -1089,14 +1092,56 @@ class S3FileSystem:
             "The 'read_text' method is not implemented for S3FileSystem."
         )
 
+    @contextmanager
     def open(
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> IO:
-        raise NotImplementedError(
-            "The 'open' method is not implemented for S3FileSystem."
-        )
+    ) -> Iterator[IO]:
+        if mode not in {"r", "rb", "w", "wb"}:
+            raise ValueError("Supported modes are: 'r', 'rb', 'w', 'wb'.")
+
+        bucket, key = self._get_s3_bucket_key()
+        s3 = self._get_s3_client()
+
+        is_binary = "b" in mode
+        is_write_mode = mode in {"w", "wb"}
+
+        with SpooledTemporaryFile(
+            mode="w+b", max_size=1024 * 1024
+        ) as temp_file:  # 1MB threshold for spooling to disk
+            try:
+                if mode in {"r", "rb"}:
+                    try:
+                        s3.download_fileobj(bucket, key, temp_file)
+                    except botocore.exceptions.ClientError as exc:
+                        error_code = exc.response.get("Error", {}).get("Code", "")
+                        if error_code in {"404", "NoSuchKey", "NotFound"}:
+                            raise FileNotFoundError(
+                                f"S3 object '{key}' was not found in bucket '{bucket}'."
+                            ) from exc
+                        raise
+                    temp_file.seek(0)
+
+                if is_binary:
+                    yield temp_file
+                else:
+                    text_handle = io.TextIOWrapper(
+                        cast(Any, temp_file),
+                        encoding=encoding or "utf-8",
+                    )
+                    try:
+                        yield text_handle
+                        text_handle.flush()
+                    finally:
+                        text_handle.detach()
+
+                if is_write_mode:
+                    temp_file.seek(0)
+                    s3.upload_fileobj(temp_file, bucket, key)
+
+            finally:
+                temp_file.close()
 
     def glob(
         self,
