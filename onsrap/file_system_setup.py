@@ -1038,9 +1038,16 @@ class S3FileSystem:
         parents: bool = True,
         exist_ok: bool = True,
     ) -> None:
-        raise NotImplementedError(
-            "The 'mkdir' method is not implemented for S3FileSystem."
-        )
+        """
+        mkdir is not applicable for S3FileSystem as S3 does not have a hierarchical
+        file structure. Provided the directory is included in the path, S3 will create
+        the necessary "folders" when a file is uploaded. Therefore, this method will
+        not perform any action and will return None.
+
+        To appropriately use this method, please ensure that the data_path contains
+        all folders that you would like to be included.
+        """
+        return None
 
     def read_text(
         self,
