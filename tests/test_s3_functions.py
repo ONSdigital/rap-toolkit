@@ -639,3 +639,131 @@ class TestS3FunctionsOpen:
         response = s3.get_object(Bucket="my-test-bucket", Key="test_folder/test.txt")
         content = response["Body"].read().decode("utf-8")
         assert content == "Content being written"
+
+
+class TestS3FunctionsGlob:
+    def test_glob(self, s3_file_system, s3):
+        """
+        Tests that the glob method correctly lists files matching a pattern
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file1.txt", Body=b"File 1"
+        )
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file2.txt", Body=b"File 2"
+        )
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file3.log", Body=b"File 3"
+        )
+
+        # List all .txt files
+        txt_files = s3_file_system.glob("*.txt")
+        expected_txt_files = [
+            "s3://my-test-bucket/test_folder/file1.txt",
+            "s3://my-test-bucket/test_folder/file2.txt",
+        ]
+        assert set(txt_files) == set(expected_txt_files)
+        for i in txt_files:
+            assert i.startswith("s3://my-test-bucket/test_folder/")
+
+    def test_glob_no_matching_files(self, s3_file_system, s3):
+        """
+        Tests that the glob method returns an empty list when no files match the pattern.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file1.log", Body=b"File 1"
+        )
+
+        # List all .txt files (none exist)
+        txt_files = s3_file_system.glob("*.txt")
+        assert txt_files == []
+
+    def test_glob_case_sensitive(self, s3_file_system, s3):
+        """
+        Tests that the glob method is case-sensitive when matching file patterns.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/File1.TXT", Body=b"File 1"
+        )
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file2.txt", Body=b"File 2"
+        )
+
+        # List all .txt files (should only match lowercase)
+        txt_files = s3_file_system.glob("*.txt")
+        expected_txt_files = ["s3://my-test-bucket/test_folder/file2.txt"]
+        assert set(txt_files) == set(expected_txt_files)
+
+    def test_glob_ignores_objects_outside_prefix(self, s3_file_system, s3):
+        """
+        Tests that the glob method ignores objects that are outside the specified prefix.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/file1.txt", Body=b"File 1"
+        )
+        s3.put_object(
+            Bucket="my-test-bucket", Key="other_folder/file2.txt", Body=b"File 2"
+        )
+
+        # List all .txt files in test_folder (should ignore other_folder)
+        txt_files = s3_file_system.glob("*.txt")
+        expected_txt_files = ["s3://my-test-bucket/test_folder/file1.txt"]
+        assert set(txt_files) == set(expected_txt_files)
+
+    def test_glob_with_directory_marker_obj(self, s3_file_system, s3):
+        """
+        Tests that the glob method correctly handles directory marker objects in S3.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        # Create a directory marker object
+        s3.put_object(Bucket="my-test-bucket", Key="test_folder/", Body=b"")
+        s3.put_object(
+            Bucket="my-test-bucket", Key="test_folder/sub_dir/file1.txt", Body=b"File 1"
+        )
+
+        # List all .txt files (should ignore the directory marker)
+        txt_files = s3_file_system.glob("sub_dir/*.txt")
+        expected_txt_files = ["s3://my-test-bucket/test_folder/sub_dir/file1.txt"]
+        assert set(txt_files) == set(expected_txt_files)
+
+    def test_glob_over_1000_matches(self, s3_file_system, s3):
+        """
+        Tests that the glob method correctly handles more than 1000 matching files
+        in the mocked S3 file system.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        # Create 1500 files
+        for i in range(1100):
+            s3.put_object(
+                Bucket="my-test-bucket",
+                Key=f"test_folder/file_{i}.txt",
+                Body=f"File {i}".encode("utf-8"),
+            )
+
+        # List all .txt files
+        txt_files = s3_file_system.glob("*.txt")
+        assert len(txt_files) == 1100
+
+    def test_glob_over_1000_records_less_matches(self, s3_file_system, s3):
+        """
+        Tests that the glob method correctly handles more than 1000 files in S3
+        but with fewer than 1000 matches for the specified pattern.
+        """
+        s3.create_bucket(Bucket="my-test-bucket")
+        # Create 1500 files
+        for i in range(1100):
+            suffix = ".txt" if i % 10 == 0 else ".log"
+            s3.put_object(
+                Bucket="my-test-bucket",
+                Key=f"test_folder/file_{i}{suffix}",
+                Body=f"File {i}".encode("utf-8"),
+            )
+
+        # List all .txt files
+        txt_files = s3_file_system.glob("*.txt")
+        assert len(txt_files) == 110
