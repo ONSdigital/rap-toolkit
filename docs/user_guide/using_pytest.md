@@ -34,6 +34,12 @@ If you only want to run pytests in a specific pytest file you can run
 pytest tests/test_example_module.py
 ```
 
+If you only want to run pytests within a specific class in that pytest file, you can run
+If you only want to run pytests in a specific pytest file you can run
+```shell
+pytest tests/test_example_module.py::TestPytestClass
+```
+
 You can try both of these in the root directory of your new repository.
 
 ## Further reading
