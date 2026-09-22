@@ -767,3 +767,41 @@ class TestS3FunctionsGlob:
         # List all .txt files
         txt_files = s3_file_system.glob("*.txt")
         assert len(txt_files) == 110
+
+
+class TestS3FunctionsParent:
+    def test_parent(self, s3_file_system):
+        """
+        Tests that the parent method correctly returns the parent directory
+        of the data_path and dir_path.
+        """
+        s3_file_system.data_path = "s3://my-test-bucket/test_folder/test.txt"
+        assert (
+            s3_file_system.parent(path_type="data") == "s3://my-test-bucket/test_folder"
+        )
+
+        s3_file_system.dir_path = "s3://my-test-bucket/test_folder/"
+        assert s3_file_system.parent(path_type="dir") == "s3://my-test-bucket"
+
+    def test_parent_invalid_type(self, s3_file_system):
+        """
+        Tests that the parent method raises a ValueError when an invalid path_type is specified.
+        """
+        with pytest.raises(ValueError):
+            s3_file_system.parent(path_type="invalid_type")
+
+    def test_parent_no_data_path(self, s3_file_system):
+        """
+        Tests that the parent method raises a ValueError when the data_path is None.
+        """
+        s3_file_system.data_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.parent(path_type="data")
+
+    def test_parent_no_dir_path(self, s3_file_system):
+        """
+        Tests that the parent method raises a ValueError when the dir_path is None.
+        """
+        s3_file_system.dir_path = None
+        with pytest.raises(ValueError):
+            s3_file_system.parent(path_type="dir")

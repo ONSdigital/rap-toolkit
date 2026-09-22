@@ -1390,12 +1390,16 @@ class S3FileSystem:
             if not self.data_path:
                 raise ValueError("Data path is not set. Cannot get parent.")
             purepath_obj = PurePosixPath(self.data_path)
-            return str(purepath_obj.parent)
+            parent_obj = str(purepath_obj.parent)
+            non_prefix = parent_obj.split("s3:/")[-1]
+            return str(self.setup.prefix + non_prefix)
         elif path_type == "dir":
             if not self.dir_path:
                 raise ValueError("Directory path is not set. Cannot get parent.")
             purepath_obj = PurePosixPath(self.dir_path)
-            return str(purepath_obj.parent)
+            parent_obj = str(purepath_obj.parent)
+            non_prefix = parent_obj.split("s3:/")[-1]
+            return str(self.setup.prefix + non_prefix)
         else:
             raise ValueError(f"Invalid path_type specified: {path_type}")
 
