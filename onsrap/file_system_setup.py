@@ -935,7 +935,7 @@ class S3FileSystem:
         # raz_client.configure_ranger_raz(s3, self.setup.ssl_file)
         return s3
 
-    def _get_s3_bucket_key(self):
+    def _get_s3_bucket_key(self, path_type):
         """
         Extract the bucket name and key from the data path.
 
@@ -944,16 +944,28 @@ class S3FileSystem:
         ``tuple[str, str]``
             A tuple containing the bucket name and key.
         """
-        if not self.data_path:
-            raise ValueError("Data path is not set. Cannot extract bucket and key.")
-        if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
-            self.data_path == f"{self.setup.prefix}{self.setup.root}"
-        ):
-            raise ValueError(
-                "Data path is set to the bucket root. Cannot extract bucket and key."
-            )
-        key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
-        return self.setup.root, key
+        if path_type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot extract bucket and key.")
+            if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.data_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Data path is set to the bucket root. Cannot extract bucket and key."
+                )
+            key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+            return self.setup.root, key
+        elif path_type == "dir":
+            if (self.dir_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.dir_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Directory path is set to the bucket root. Cannot extract bucket and key."
+                )
+            key = self.dir_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+            return self.setup.root, key
+        else:
+            raise ValueError("Invalid path_type. Expected 'data' or 'dir'.")
 
     def exists(
         self,
@@ -982,15 +994,18 @@ class S3FileSystem:
                 raise ValueError(
                     "Data path is set to the bucket root. Cannot check existence of data file at bucket root."
                 )
-            bucket, key = self._get_s3_bucket_key()
+            bucket, key = self._get_s3_bucket_key("data")
             try:
                 s3.head_object(Bucket=bucket, Key=key)
+                s3.close()
                 return True
             except botocore.exceptions.ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
                 if error_code in ("404", "NoSuchKey", "NotFound"):
+                    s3.close()
                     return False
                 else:
+                    s3.close()
                     raise
 
         if type == "dir":
@@ -1006,12 +1021,15 @@ class S3FileSystem:
                 response = s3.list_objects_v2(
                     Bucket=self.setup.root, Prefix=prefix, MaxKeys=1
                 )
+                s3.close()
                 return response.get("KeyCount", 0) > 0
             except botocore.exceptions.ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
                 if error_code in ("404", "NoSuchBucket", "NotFound"):
+                    s3.close()
                     return False
                 else:
+                    s3.close()
                     raise
 
         raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
@@ -1108,7 +1126,7 @@ class S3FileSystem:
         if mode not in {"r", "rb", "w", "wb"}:
             raise ValueError("Supported modes are: 'r', 'rb', 'w', 'wb'.")
 
-        bucket, key = self._get_s3_bucket_key()
+        bucket, key = self._get_s3_bucket_key(path_type="data")
         s3 = self._get_s3_client()
 
         is_binary = "b" in mode
@@ -1149,14 +1167,52 @@ class S3FileSystem:
 
             finally:
                 temp_file.close()
+                s3.close()
 
     def glob(
         self,
         specific_pattern: str,
     ) -> list[str]:
-        raise NotImplementedError(
-            "The 'glob' method is not implemented for S3FileSystem."
-        )
+        """
+        Identifies specific files within an S3 bucket at the directory path that match
+        the provided glob pattern.
+
+        Aims to emulate the pathlib.glob method for S3 buckets, allowing users to filter
+        files with a certain prefix (equivalent of a directory) by a specified pattern
+        and extract all relevant filepaths.
+
+        Parameters
+        ----------
+        ``specific_pattern`` : str
+            The glob pattern to match files against (e.g., "*.txt" for all text files).
+
+        Returns
+        -------
+        list[str]
+            A list of matching S3 file paths.
+        """
+
+        bucket, key = self._get_s3_bucket_key(path_type="dir")
+        s3 = self._get_s3_client()
+
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+
+            key_list = []
+
+            for page in paginator.paginate(Bucket=bucket, Prefix=key):
+                contents_list = page.get("Contents", [])
+
+                for item in contents_list:
+                    key_name = item.get("Key", "")
+                    relative_key = key_name[len(key) :]
+                    if PurePosixPath(relative_key).match(specific_pattern):
+                        key_list.append(f"{self.setup.prefix}{bucket}/{key_name}")
+
+            return key_list
+
+        finally:
+            s3.close()
 
     def expand_user(
         self,
