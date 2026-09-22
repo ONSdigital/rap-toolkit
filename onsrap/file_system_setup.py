@@ -466,7 +466,7 @@ class FileSystem(Protocol):
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path: ...
+    ) -> Path | str: ...
 
 
 # TODO: do we need a separate protocol to cover local file systems? specific
@@ -850,7 +850,7 @@ class LocalFileSystem:
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path:
+    ) -> Path | str:
         """
         Returns the parent directory of the data file or directory.
 
@@ -1366,10 +1366,38 @@ class S3FileSystem:
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path:
-        raise NotImplementedError(
-            "The 'parent' method is not implemented for S3FileSystem."
-        )
+    ) -> Path | str:
+        """
+        Extracts the file path of the parent of the data_path or dir_path using
+        PurePosixPath.
+
+        As this is purely extracting parts of a file path, pathlib is utilised.
+        Whilst this function can return either Path types or str types, only str
+        types will be returned with S3 file paths given Path types are not
+        compatible.
+
+        Parameters
+        ----------
+        ``path_type`` : str
+            The type of path ('dir' or 'data') for which to extract the parent.
+
+        Returns
+        -------
+        ``Path | str``
+            The parent of the specified path type in either string or Path format.
+        """
+        if path_type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot get parent.")
+            purepath_obj = PurePosixPath(self.data_path)
+            return str(purepath_obj.parent)
+        elif path_type == "dir":
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot get parent.")
+            purepath_obj = PurePosixPath(self.dir_path)
+            return str(purepath_obj.parent)
+        else:
+            raise ValueError(f"Invalid path_type specified: {path_type}")
 
 
 class FileSystemFactory:
