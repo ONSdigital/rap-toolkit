@@ -14,6 +14,12 @@ from urllib.parse import unquote, urlparse, urlsplit
 import boto3
 import botocore
 
+try:
+    from raz_client import configure_ranger_raz  # type: ignore[import-not-found]
+except ImportError:
+    configure_ranger_raz = None
+
+
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
@@ -922,17 +928,32 @@ class S3FileSystem:
         """
         return f"S3FileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
 
-    def _get_s3_client(self):
+    def _get_s3_client(self) -> Any:
         """
         Create and return an S3 client using boto3.
+
+        If an ssl_file is provided and raz_client is available, configures
+        Ranger RAZ for access control validation.
 
         Returns
         -------
         ``boto3.client``
             An S3 client for interacting with the S3 service.
+
+        Raises
+        ------
+        ``ValueError``
+            If ssl_file is provided but raz_client is not installed.
         """
         s3 = boto3.client("s3")
-        # raz_client.configure_ranger_raz(s3, self.setup.ssl_file)
+
+        if self.setup.ssl_file:
+            if configure_ranger_raz is None:
+                raise ValueError(
+                    "Ranger RAZ client is not installed. Please install it to use SSL file configuration."
+                )
+            configure_ranger_raz(s3, self.setup.ssl_file)
+
         return s3
 
     def _get_s3_bucket_key(self, path_type):

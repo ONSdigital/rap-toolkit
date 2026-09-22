@@ -1,8 +1,23 @@
+from unittest.mock import patch
+
 import botocore
 import pytest
 from moto import mock_aws
 
 from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+
+
+@pytest.fixture
+def mock_raz_client():
+    """
+    Mock the raz_client.configure_ranger_raz function.
+
+    This allows tests to validate raz_client integration without requiring
+    actual SSL certificates or the raz_client library to be installed.
+    """
+    with patch("onsrap.file_system_setup.configure_ranger_raz") as mock_configure:
+        mock_configure.return_value = None
+        yield mock_configure
 
 
 @pytest.fixture
@@ -26,6 +41,18 @@ def s3_filesystem_setup():
         root="my-test-bucket",
         workspace_path="test_folder",
         file_name="test.txt",
+    )
+
+
+@pytest.fixture
+def s3_filesystem_setup_with_ssl():
+    """Fixture to set up a mocked S3 file system with SSL file."""
+    return FileSystemSetUp(
+        prefix="s3://",
+        root="my-test-bucket",
+        workspace_path="test_folder",
+        file_name="test.txt",
+        ssl_file="/path/to/cert.pem",  # No actual file needed - it's mocked
     )
 
 
@@ -89,14 +116,14 @@ class TestS3FunctionsExists:
         with pytest.raises(ValueError):
             s3_file_system.exists(type="invalid_type")
 
-    def test_exists_error_typing(self, s3_file_system):
+    def test_exists_error_typing(self, aws_credentials, s3_file_system):
         """
         Tests that the exists method raises a ClientError when there is an error
         accessing the S3 file system.
         """
         import botocore.exceptions
 
-        with pytest.raises(botocore.exceptions.ClientError):
+        with mock_aws(), pytest.raises(botocore.exceptions.ClientError):
             s3_file_system.exists(type="data")
 
     def test_no_file_name_error(self, s3):
@@ -805,3 +832,94 @@ class TestS3FunctionsParent:
         s3_file_system.dir_path = None
         with pytest.raises(ValueError):
             s3_file_system.parent(path_type="dir")
+
+
+class TestS3FileSystemRazClientValidation:
+    """Tests for raz_client validation in S3FileSystem."""
+
+    def test_s3_client_without_ssl_file(self, mock_raz_client, aws_credentials):
+        """
+        Test that _get_s3_client() works without ssl_file and doesn't call raz_client.
+        """
+        with mock_aws():
+            setup = FileSystemSetUp(
+                prefix="s3://",
+                root="test-bucket",
+                workspace_path="data",
+                file_name="file.txt",
+                ssl_file=None,  # No SSL file
+            )
+            s3_fs = FileSystemFactory.create(setup)
+            s3_client = s3_fs._get_s3_client()
+
+            # Verify raz_client was NOT called
+            mock_raz_client.assert_not_called()
+            assert s3_client is not None
+
+    def test_s3_client_with_ssl_file_mocked(self, mock_raz_client, aws_credentials):
+        """
+        Test that _get_s3_client() calls mocked raz_client when ssl_file is provided.
+
+        This demonstrates how to test raz_client validation without needing
+        an actual SSL certificate file.
+        """
+        with mock_aws():
+            setup = FileSystemSetUp(
+                prefix="s3://",
+                root="test-bucket",
+                workspace_path="data",
+                file_name="file.txt",
+                ssl_file="/path/to/cert.pem",  # Path doesn't need to exist
+            )
+            s3_fs = FileSystemFactory.create(setup)
+            s3_client = s3_fs._get_s3_client()
+
+            # Verify raz_client WAS called with correct arguments
+            mock_raz_client.assert_called_once_with(s3_client, "/path/to/cert.pem")
+            assert s3_client is not None
+
+    def test_s3_client_ssl_file_without_raz_client_library(self, aws_credentials):
+        """
+        Test that ValueError is raised when ssl_file is provided but raz_client not installed.
+
+        This tests the error handling when raz_client library is not available.
+        """
+        with (
+            mock_aws(),
+            patch("onsrap.file_system_setup.configure_ranger_raz", None),
+            pytest.raises(ValueError, match="Ranger RAZ client is not installed"),
+        ):
+            setup = FileSystemSetUp(
+                prefix="s3://",
+                root="test-bucket",
+                workspace_path="data",
+                file_name="file.txt",
+                ssl_file="/path/to/cert.pem",
+            )
+            s3_fs = FileSystemFactory.create(setup)
+
+            # Should raise ValueError because raz_client is unavailable
+            s3_fs._get_s3_client()
+
+    def test_s3_filesystem_with_ssl_file_in_operations(self, mock_raz_client, s3):
+        """
+        Test that filesystem operations work correctly with raz_client validation enabled.
+
+        This demonstrates a complete workflow using S3FileSystem with SSL validation.
+        """
+        s3.create_bucket(Bucket="test-bucket")
+        s3.put_object(Bucket="test-bucket", Key="data/file.txt", Body=b"Test data")
+
+        setup = FileSystemSetUp(
+            prefix="s3://",
+            root="test-bucket",
+            workspace_path="data",
+            file_name="file.txt",
+            ssl_file="/path/to/cert.pem",
+        )
+        s3_fs = FileSystemFactory.create(setup)
+
+        # Verify raz_client was called during initialization
+        # (Note: It won't be called until _get_s3_client is called)
+        assert s3_fs.exists(type="data") is True
+        mock_raz_client.assert_called()
