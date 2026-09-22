@@ -1143,7 +1143,7 @@ class S3FileSystem:
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> Generator[IO]:
+    ) -> Generator[IO, None, None]:
         if mode not in {"r", "rb", "w", "wb"}:
             raise ValueError("Supported modes are: 'r', 'rb', 'w', 'wb'.")
 
