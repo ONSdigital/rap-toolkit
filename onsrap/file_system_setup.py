@@ -3,6 +3,7 @@ import importlib.util
 import io
 import logging
 import re
+import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
@@ -21,6 +22,18 @@ except ImportError:
 
 
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
+
+
+def _text_wrapper_buffer(temp_file: SpooledTemporaryFile) -> IO[bytes]:
+    """
+    Return a binary buffer compatible with io.TextIOWrapper across Python versions.
+
+    Python 3.10's SpooledTemporaryFile does not fully expose the BufferedIOBase
+    interface expected by TextIOWrapper, so use the underlying file object there.
+    """
+    if sys.version_info[:2] == (3, 10):
+        return cast(IO[bytes], temp_file._file)
+    return cast(IO[bytes], temp_file)
 
 
 @dataclass
@@ -67,7 +80,11 @@ class FileSystemSetUp:
         ``str``
             The constructed URI.
         """
-        root = self.root.rstrip("/")
+        if self.root.startswith("/") and self.root != "/":
+            root = self.root.lstrip("/")
+        else:
+            root = self.root
+        root = root.rstrip("/")
         if self.workspace_path:
             workspace_path = self.workspace_path.lstrip("/")
             if self.file_name:
@@ -1173,7 +1190,7 @@ class S3FileSystem:
                     yield temp_file
                 else:
                     text_handle = io.TextIOWrapper(
-                        cast(Any, temp_file),
+                        _text_wrapper_buffer(temp_file),
                         encoding=encoding or "utf-8",
                     )
                     try:
