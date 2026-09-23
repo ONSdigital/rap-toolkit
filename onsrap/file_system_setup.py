@@ -84,15 +84,28 @@ class FileSystemSetUp:
             root = self.root.lstrip("/")
         else:
             root = self.root
-        root = root.rstrip("/")
-        if self.workspace_path:
-            workspace_path = self.workspace_path.lstrip("/")
+
+        if root != "/" and root.endswith("/"):
+            root = root.rstrip("/")
+
+        if root == "/":
+            if self.workspace_path:
+                workspace_path = self.workspace_path.lstrip("/")
+                if self.file_name:
+                    return f"{self.prefix}{workspace_path}/{self.file_name}"
+                return f"{self.prefix}{workspace_path}"
             if self.file_name:
-                return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
-            return f"{self.prefix}{root}/{workspace_path}"
-        if self.file_name:
-            return f"{self.prefix}{root}/{self.file_name}"
-        return f"{self.prefix}{root}"
+                return f"{self.prefix}{self.file_name}"
+            return f"{self.prefix}"
+        else:
+            if self.workspace_path:
+                workspace_path = self.workspace_path.lstrip("/")
+                if self.file_name:
+                    return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
+                return f"{self.prefix}{root}/{workspace_path}"
+            if self.file_name:
+                return f"{self.prefix}{root}/{self.file_name}"
+            return f"{self.prefix}{root}"
 
     @classmethod
     def from_str(
