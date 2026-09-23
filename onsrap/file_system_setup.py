@@ -1,14 +1,39 @@
 import glob
 import importlib.util
+import io
 import logging
 import re
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.machinery import ModuleSpec
-from pathlib import Path, PurePosixPath
-from typing import IO, Any, Optional, Protocol, Type
+from pathlib import Path, PurePath, PurePosixPath
+from tempfile import SpooledTemporaryFile
+from typing import IO, Any, ContextManager, Generator, Optional, Protocol, Type, cast
 from urllib.parse import unquote, urlparse, urlsplit
 
+import boto3
+import botocore
+
+try:
+    from raz_client import configure_ranger_raz  # type: ignore[import-not-found]
+except ImportError:
+    configure_ranger_raz = None
+
+
 WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
+
+
+def _text_wrapper_buffer(temp_file: SpooledTemporaryFile) -> IO[bytes]:
+    """
+    Return a binary buffer compatible with io.TextIOWrapper across Python versions.
+
+    Python 3.10's SpooledTemporaryFile does not fully expose the BufferedIOBase
+    interface expected by TextIOWrapper, so use the underlying file object there.
+    """
+    if sys.version_info[:2] == (3, 10):
+        return cast(IO[bytes], temp_file._file)
+    return cast(IO[bytes], temp_file)
 
 
 @dataclass
@@ -44,6 +69,7 @@ class FileSystemSetUp:
     root: str = str(Path.cwd().resolve())
     workspace_path: Optional[str] = None
     file_name: Optional[str] = None
+    ssl_file: Optional[str] = None
 
     def create_uri(self) -> str:
         """
@@ -54,18 +80,37 @@ class FileSystemSetUp:
         ``str``
             The constructed URI.
         """
-        root = self.root.rstrip("/")
-        if self.workspace_path:
-            workspace_path = self.workspace_path.lstrip("/")
+        if self.root.startswith("/") and self.root != "/":
+            root = self.root.lstrip("/")
+        else:
+            root = self.root
+
+        if root != "/" and root.endswith("/"):
+            root = root.rstrip("/")
+
+        if root == "/":
+            if self.workspace_path:
+                workspace_path = self.workspace_path.lstrip("/")
+                if self.file_name:
+                    return f"{self.prefix}{workspace_path}/{self.file_name}"
+                return f"{self.prefix}{workspace_path}"
             if self.file_name:
-                return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
-            return f"{self.prefix}{root}/{workspace_path}"
-        if self.file_name:
-            return f"{self.prefix}{root}/{self.file_name}"
-        return f"{self.prefix}{root}"
+                return f"{self.prefix}{self.file_name}"
+            return f"{self.prefix}"
+        else:
+            if self.workspace_path:
+                workspace_path = self.workspace_path.lstrip("/")
+                if self.file_name:
+                    return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
+                return f"{self.prefix}{root}/{workspace_path}"
+            if self.file_name:
+                return f"{self.prefix}{root}/{self.file_name}"
+            return f"{self.prefix}{root}"
 
     @classmethod
-    def from_str(cls, uri: str, path_type: str = "file"):
+    def from_str(
+        cls, uri: str, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from a URI string.
 
@@ -86,11 +131,17 @@ class FileSystemSetUp:
             normalised_uri, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            ssl_file=ssl_file,
         )
 
     @classmethod
-    def from_path(cls, path: Path, path_type: str = "file"):
+    def from_path(
+        cls, path: Path, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from a Path object.
 
@@ -111,11 +162,17 @@ class FileSystemSetUp:
             normalised_path, path_type
         )
         return FileSystemSetUp(
-            prefix=prefix, root=root, workspace_path=workspace_path, file_name=file_name
+            prefix=prefix,
+            root=root,
+            workspace_path=workspace_path,
+            file_name=file_name,
+            ssl_file=ssl_file,
         )
 
     @classmethod
-    def from_any(cls, path: Any, path_type: str = "file"):
+    def from_any(
+        cls, path: Any, path_type: str = "file", ssl_file: Optional[str] = None
+    ):
         """
         Derive a FileSystemSetUp object from either a URI string or a Path object.
 
@@ -132,9 +189,9 @@ class FileSystemSetUp:
             The derived FileSystemSetUp object.
         """
         if isinstance(path, str):
-            return cls.from_str(path, path_type)
+            return cls.from_str(path, path_type, ssl_file=ssl_file)
         elif isinstance(path, Path):
-            return cls.from_path(path, path_type)
+            return cls.from_path(path, path_type, ssl_file=ssl_file)
         elif path is None:
             raise ValueError(
                 "You cannot create a FileSystemSetUp instance from a "
@@ -147,17 +204,20 @@ class FileSystemSetUp:
             )
 
     @classmethod
-    def file_system_setup_factory(cls, input: Any, path_type: str):
+    def file_system_setup_factory(
+        cls, input: Any, path_type: str, ssl_file: Optional[str] = None
+    ):
         if isinstance(input, FileSystemSetUp):
             new_fs_setup = FileSystemSetUp(
                 prefix=input.prefix,
                 root=input.root,
                 workspace_path=input.workspace_path,
                 file_name=input.file_name,
+                ssl_file=input.ssl_file,
             )
             return new_fs_setup
         elif isinstance(input, (str, Path)):
-            return cls.from_any(input, path_type=path_type)
+            return cls.from_any(input, path_type=path_type, ssl_file=ssl_file)
         else:
             raise TypeError(
                 f"Input must be a string, Path, or FileSystemSetUp object. {input} is of type {type(input)}."
@@ -273,7 +333,10 @@ class FileSystemSetUp:
         if not parsed.scheme:
             raise ValueError(f"Expected URI with scheme, got: {uri!r}")
 
-        prefix = f"{parsed.scheme}:///"
+        if parsed.scheme == "file":
+            prefix = f"{parsed.scheme}:///"
+        else:
+            prefix = f"{parsed.scheme}://"
 
         # Decode escaped characters and split path robustly
         raw_path = unquote(parsed.path or "")
@@ -389,7 +452,7 @@ class FileSystem(Protocol):
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> IO: ...
+    ) -> ContextManager[IO]: ...
 
     def glob(
         self,
@@ -439,7 +502,7 @@ class FileSystem(Protocol):
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path: ...
+    ) -> Path | str: ...
 
 
 # TODO: do we need a separate protocol to cover local file systems? specific
@@ -620,7 +683,7 @@ class LocalFileSystem:
         self,
         mode: str = "r",
         encoding: Optional[str] = "utf-8",
-    ) -> IO:
+    ) -> ContextManager[IO]:
         """
         Open the data file in the local file system.
 
@@ -633,8 +696,8 @@ class LocalFileSystem:
 
         Returns
         -------
-        ``IO``
-            A file object corresponding to the opened file.
+        ``ContextManager[IO]``
+            A context manager yielding a file object corresponding to the opened file.
         """
         if not self.data_path:
             raise ValueError("Data path is not set. Cannot open a file.")
@@ -823,7 +886,7 @@ class LocalFileSystem:
     def parent(
         self,
         path_type: str,  # dir or data
-    ) -> Path:
+    ) -> Path | str:
         """
         Returns the parent directory of the data file or directory.
 
@@ -847,7 +910,549 @@ class LocalFileSystem:
         raise ValueError("Invalid path_type. Expected 'dir' or 'data'.")
 
 
-# TODO: add a FileSystem for S3 when LFS one is stable
+class S3FileSystem:
+    def __init__(self, setup: FileSystemSetUp):
+        """
+        Initialize the S3FileSystem with the provided setup.
+
+        Parameters
+        ----------
+        ``setup`` : FileSystemSetUp
+            The setup information containing the prefix, root, and workspace path.
+        """
+        self.setup = setup
+        root = setup.root
+        self.dir_path: str = (
+            (setup.prefix + root + "/" + setup.workspace_path + "/")
+            if setup.workspace_path
+            else (setup.prefix + root + "/")
+        )
+        self.data_path: str | None = (
+            (self.dir_path + setup.file_name) if setup.file_name else None
+        )
+
+    def __str__(self) -> str:
+        """
+        Return a string representation of the S3FileSystem.
+
+        Returns
+        -------
+        ``str``
+            A string representation of the S3FileSystem, including the directory
+            and data paths.
+        """
+        return (
+            f"S3 File System:\n"
+            f"Directory Path: {self.dir_path}\nData Path: {self.data_path}"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Return a detailed string representation of the S3FileSystem.
+
+        Returns
+        -------
+        ``str``
+            A detailed string representation of the S3FileSystem, including the
+            directory and data paths.
+        """
+        return f"S3FileSystem(dir_path={self.dir_path!r}, data_path={self.data_path!r})"
+
+    def _get_s3_client(self) -> Any:
+        """
+        Create and return an S3 client using boto3.
+
+        If an ssl_file is provided and raz_client is available, configures
+        Ranger RAZ for access control validation.
+
+        Returns
+        -------
+        ``boto3.client``
+            An S3 client for interacting with the S3 service.
+
+        Raises
+        ------
+        ``ValueError``
+            If ssl_file is provided but raz_client is not installed.
+        """
+        s3 = boto3.client("s3")
+
+        if self.setup.ssl_file:
+            if configure_ranger_raz is None:
+                raise ValueError(
+                    "Ranger RAZ client is not installed. Please install it to use SSL file configuration."
+                )
+            configure_ranger_raz(s3, self.setup.ssl_file)
+
+        return s3
+
+    def _get_s3_bucket_key(self, path_type):
+        """
+        Extract the bucket name and key from the data path.
+
+        Returns
+        -------
+        ``tuple[str, str]``
+            A tuple containing the bucket name and key.
+        """
+        if path_type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot extract bucket and key.")
+            if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.data_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Data path is set to the bucket root. Cannot extract bucket and key."
+                )
+            key = self.data_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+            return self.setup.root, key
+        elif path_type == "dir":
+            if (self.dir_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.dir_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Directory path is set to the bucket root. Cannot extract bucket and key."
+                )
+            key = self.dir_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+            return self.setup.root, key
+        else:
+            raise ValueError("Invalid path_type. Expected 'data' or 'dir'.")
+
+    def exists(
+        self,
+        type: str,  # dir or data
+    ) -> bool:
+        """
+        Check if the path exists in the S3 file system.
+
+        This method should be implemented to check the existence of the directory or
+        data file in the S3 bucket.
+
+        Returns
+        -------
+        ``bool``
+            True if the path exists, False otherwise.
+        """
+        s3 = self._get_s3_client()
+        if type == "data":
+            if not self.data_path:
+                raise ValueError(
+                    "Data path is not set. Cannot check existence of data file."
+                )
+            if (self.data_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.data_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Data path is set to the bucket root. Cannot check existence of data file at bucket root."
+                )
+            bucket, key = self._get_s3_bucket_key("data")
+            try:
+                s3.head_object(Bucket=bucket, Key=key)
+                s3.close()
+                return True
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ("404", "NoSuchKey", "NotFound"):
+                    s3.close()
+                    return False
+                else:
+                    s3.close()
+                    raise
+
+        if type == "dir":
+            if (self.dir_path == f"{self.setup.prefix}{self.setup.root}/") or (
+                self.dir_path == f"{self.setup.prefix}{self.setup.root}"
+            ):
+                raise ValueError(
+                    "Directory path is set to the bucket root. Cannot check existence of data file at bucket root."
+                )
+            prefix = self.dir_path.replace(f"{self.setup.prefix}{self.setup.root}/", "")
+
+            try:
+                response = s3.list_objects_v2(
+                    Bucket=self.setup.root, Prefix=prefix, MaxKeys=1
+                )
+                s3.close()
+                return response.get("KeyCount", 0) > 0
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ("404", "NoSuchBucket", "NotFound"):
+                    s3.close()
+                    return False
+                else:
+                    s3.close()
+                    raise
+
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+
+    def is_file(
+        self,
+    ) -> bool:
+        """
+        Checks if the path provided is a file within the S3 FileSystem.
+
+        If a file name is provided and therefore a data_path is generated, and that
+        data path does not end in a / (indicating a directory), then this method will
+        return True. Also checks whether the file itself already exists.
+
+        Returns
+        -------
+        ``bool``
+            True if the path is a file, False otherwise.
+        """
+        if self.data_path:
+            if self.data_path.endswith("/"):
+                return False
+            else:
+                return bool(self.data_path) and self.exists(type="data")
+        else:
+            return False
+
+    def is_absolute(
+        self,
+        type: str,  # dir or data
+    ) -> bool:
+        """
+        Returns True if the path contains the prefix and the bucket and False
+        otherwise.
+
+        All file paths in S3 are absolute paths but this method checks that the path
+        continues past the bucket name to ensure that the path is not just the bucket
+        itself.
+        """
+        if type == "dir":
+            if self.dir_path:
+                return self.dir_path.startswith(f"s3://{self.setup.root}/")
+            else:
+                raise ValueError(
+                    "Directory path is not set. Cannot check if it is absolute."
+                )
+
+        elif type == "data":
+            if self.data_path:
+                return self.data_path.startswith(f"s3://{self.setup.root}/")
+            else:
+                raise ValueError(
+                    "Data path is not set. Cannot check if it is absolute."
+                )
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+
+    def mkdir(
+        self,
+        parents: bool = True,
+        exist_ok: bool = True,
+    ) -> None:
+        """
+        mkdir is not applicable for S3FileSystem as S3 does not have a hierarchical
+        file structure. Provided the directory is included in the path, S3 will create
+        the necessary "folders" when a file is uploaded. Therefore, this method will
+        not perform any action and will return None.
+
+        To appropriately use this method, please ensure that the data_path contains
+        all folders that you would like to be included.
+        """
+        return None
+
+    def read_text(
+        self,
+        encoding: Optional[str] = "utf-8",
+    ) -> str:
+        """
+        Reads the content of the file at the data path as text.
+
+        Returns
+        -------
+        ``str``
+            The content of the file.
+        """
+        with self.open(mode="r", encoding=encoding) as file:
+            return file.read()
+
+    @contextmanager
+    def open(
+        self,
+        mode: str = "r",
+        encoding: Optional[str] = "utf-8",
+    ) -> Generator[IO, None, None]:
+        if mode not in {"r", "rb", "w", "wb"}:
+            raise ValueError("Supported modes are: 'r', 'rb', 'w', 'wb'.")
+
+        bucket, key = self._get_s3_bucket_key(path_type="data")
+        s3 = self._get_s3_client()
+
+        is_binary = "b" in mode
+        is_write_mode = mode in {"w", "wb"}
+
+        with SpooledTemporaryFile(
+            mode="w+b", max_size=1024 * 1024
+        ) as temp_file:  # 1MB threshold for spooling to disk
+            try:
+                if mode in {"r", "rb"}:
+                    try:
+                        s3.download_fileobj(bucket, key, temp_file)
+                    except botocore.exceptions.ClientError as exc:
+                        error_code = exc.response.get("Error", {}).get("Code", "")
+                        if error_code in {"404", "NoSuchKey", "NotFound"}:
+                            raise FileNotFoundError(
+                                f"S3 object '{key}' was not found in bucket '{bucket}'."
+                            ) from exc
+                        raise
+                    temp_file.seek(0)
+
+                if is_binary:
+                    yield temp_file
+                else:
+                    text_handle = io.TextIOWrapper(
+                        _text_wrapper_buffer(temp_file),
+                        encoding=encoding or "utf-8",
+                    )
+                    try:
+                        yield text_handle
+                        text_handle.flush()
+                    finally:
+                        text_handle.detach()
+
+                if is_write_mode:
+                    temp_file.seek(0)
+                    s3.upload_fileobj(temp_file, bucket, key)
+
+            finally:
+                temp_file.close()
+                s3.close()
+
+    def glob(
+        self,
+        specific_pattern: str,
+    ) -> list[str]:
+        """
+        Identifies specific files within an S3 bucket at the directory path that match
+        the provided glob pattern.
+
+        Aims to emulate the pathlib.glob method for S3 buckets, allowing users to filter
+        files with a certain prefix (equivalent of a directory) by a specified pattern
+        and extract all relevant filepaths.
+
+        Parameters
+        ----------
+        ``specific_pattern`` : str
+            The glob pattern to match files against (e.g., "*.txt" for all text files).
+
+        Returns
+        -------
+        list[str]
+            A list of matching S3 file paths.
+        """
+
+        bucket, key = self._get_s3_bucket_key(path_type="dir")
+        s3 = self._get_s3_client()
+
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+
+            key_list = []
+
+            for page in paginator.paginate(Bucket=bucket, Prefix=key):
+                contents_list = page.get("Contents", [])
+
+                for item in contents_list:
+                    key_name = item.get("Key", "")
+                    relative_key = key_name[len(key) :]
+                    if PurePosixPath(relative_key).match(specific_pattern):
+                        key_list.append(f"{self.setup.prefix}{bucket}/{key_name}")
+
+            return key_list
+
+        finally:
+            s3.close()
+
+    def expand_user(
+        self,
+    ) -> str:
+        """
+        This method is not applicable for S3FileSystem as there is no concept of a user
+        home directory in S3. Therefore, when called, it will return the data path as is.
+
+        If there is no data path, it will return the directory path. This is a
+        placeholder to maintain interface consistency with other file system
+        implementations, but it does not perform any expansion.
+        """
+        return self.data_path if self.data_path else self.dir_path
+
+    def resolve(
+        self,
+        type: str,  # dir or data
+    ) -> str | Path:
+        if type == "dir":
+            if self.dir_path and self.dir_path.startswith(f"s3://{self.setup.root}/"):
+                return self.dir_path
+            else:
+                raise ValueError(
+                    "Directory path is not set or not an absolute S3 path."
+                )
+
+        elif type == "data":
+            if self.data_path and self.data_path.startswith(f"s3://{self.setup.root}/"):
+                return self.data_path
+            else:
+                raise ValueError("Data path is not set or not an absolute S3 path.")
+
+        raise ValueError("Invalid type specified. Use 'dir' or 'data'.")
+
+    def spec_from_file_location(
+        self,
+        module_name: str,
+    ):
+        raise NotImplementedError(
+            "The 'spec_from_file_location' method is not implemented for S3FileSystem."
+        )
+
+    def file_handler(
+        self,
+        file_name: str,
+        encoding: str,
+    ):
+        raise NotImplementedError(
+            "The 'file_handler' method is not implemented for S3FileSystem."
+        )
+
+    def join_path(
+        self,
+        *paths: str,
+    ) -> str:
+        """
+        Joins multiple path components into a single slash-separated S3 path.
+
+        This avoids ``PurePath`` because it is platform-specific and would emit
+        backslashes on Windows.
+
+        Parameters
+        ----------
+        ``*paths`` : str
+            The path components to join.
+
+        Returns
+        -------
+        ``str``
+            The joined path as a string.
+
+        Raises
+        ------
+        ``ValueError``
+            If the directory path is not set, indicating that the base path for
+            joining is not available.
+        """
+        if not self.dir_path:
+            raise ValueError("Directory path is not set. Cannot join paths.")
+        joined_paths = [self.dir_path.rstrip("/")]
+        joined_paths.extend(path.strip("/") for path in paths)
+        return "/".join(joined_paths)
+
+    def suffix(
+        self,
+    ) -> str:
+        """
+        Extracts the suffix of the data_path using PurePath from pathlib.
+
+        This method is suitable as PurePath methods do not require any file
+        system access and can operate on the path string directly.
+        """
+        if not self.data_path:
+            raise ValueError("Data path is not set. Cannot get suffix.")
+        purepath_obj = PurePath(self.data_path)
+        return purepath_obj.suffix
+
+    def stem(
+        self,
+        type: str,  # dir or data
+    ) -> str:
+        """
+        Extracts the stem of the specified path type using PurePath from pathlib.
+
+        Parameters
+        ----------
+        ``type`` : str
+            The type of path ('dir' or 'data') for which to extract the stem.
+
+        Returns
+        -------
+        ``str``
+            The stem of the specified path.
+
+        Raises
+        ------
+        ``ValueError``
+            If the specified path is not set or if an invalid type is specified.
+        """
+        if type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot get stem.")
+            purepath_obj = PurePath(self.data_path)
+            return purepath_obj.stem
+        elif type == "dir":
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot get stem.")
+            purepath_obj = PurePath(self.dir_path)
+            return purepath_obj.stem
+        else:
+            raise ValueError(f"Invalid type specified: {type}")
+
+    def write_text(
+        self,
+        content: str,
+        encoding: str = "utf-8",
+    ) -> None:
+        """
+        Writes the given content to the file at the data path as text.
+
+        Parameters
+        ----------
+        ``content`` : str
+            The content to write to the file.
+        ``encoding`` : str, optional
+            The encoding to use when writing the file, by default "utf-8".
+        """
+        with self.open(mode="w", encoding=encoding) as file:
+            file.write(content)
+
+    def parent(
+        self,
+        path_type: str,  # dir or data
+    ) -> Path | str:
+        """
+        Extracts the file path of the parent of the data_path or dir_path using
+        PurePosixPath.
+
+        As this is purely extracting parts of a file path, pathlib is utilised.
+        Whilst this function can return either Path types or str types, only str
+        types will be returned with S3 file paths given Path types are not
+        compatible.
+
+        Parameters
+        ----------
+        ``path_type`` : str
+            The type of path ('dir' or 'data') for which to extract the parent.
+
+        Returns
+        -------
+        ``Path | str``
+            The parent of the specified path type in either string or Path format.
+        """
+        if path_type == "data":
+            if not self.data_path:
+                raise ValueError("Data path is not set. Cannot get parent.")
+            purepath_obj = PurePosixPath(self.data_path)
+            parent_obj = str(purepath_obj.parent)
+            non_prefix = parent_obj.split("s3:/")[-1]
+            return str(self.setup.prefix + non_prefix)
+        elif path_type == "dir":
+            if not self.dir_path:
+                raise ValueError("Directory path is not set. Cannot get parent.")
+            purepath_obj = PurePosixPath(self.dir_path)
+            parent_obj = str(purepath_obj.parent)
+            non_prefix = parent_obj.split("s3:/")[-1]
+            return str(self.setup.prefix + non_prefix)
+        else:
+            raise ValueError(f"Invalid path_type specified: {path_type}")
 
 
 class FileSystemFactory:
@@ -922,3 +1527,5 @@ class FileSystemFactory:
 
 # Registering the file system classes with their respective prefixes
 FileSystemFactory.register("file:///", LocalFileSystem)
+FileSystemFactory.register("s3://", S3FileSystem)
+FileSystemFactory.register("s3a://", S3FileSystem)

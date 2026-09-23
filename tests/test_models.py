@@ -286,6 +286,7 @@ class TestPipelineConfig:
             "python_executable": None,
             "variables": ["name", "age"],
             "num_stages": 6,
+            "ssl_file": None,
         }
 
 
