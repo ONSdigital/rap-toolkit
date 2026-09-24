@@ -1682,7 +1682,11 @@ class Pipeline:
             If the pipeline_payload, global_payload or stage_payload are not mapping types.
         """
         possible_stage_keys = ("stage_configuration", "stage_config")
-        possible_pipeline_keys = ("pipeline_variables", "pipeline_config")
+        possible_pipeline_keys = (
+            "pipeline_variables",
+            "pipeline_config",
+            "pipeline_configuration",
+        )
         possible_global_keys = (
             "global_configuration",
             "global_config",
