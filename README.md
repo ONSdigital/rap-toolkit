@@ -25,33 +25,43 @@ For more information on the ONS RAP Minimum Standards, please see the full [stan
 ## Key Features and Capabilities
 
 - **Build pipelines from code you already have**
+  
   Use existing Python scripts or callables as stages, so teams can adopt pipeline orchestration over already existing code rather than rewriting work.
 
 - **Run stages in the right order automatically**
+  
   Define dependencies once, and the package computes a valid execution order for you using a stage graph.
 
 - **Support both code-first and config-first workflows**
+  
   Create pipelines from Python definitions (for flexibility) or from structured config/dictionaries (for repeatability and easier handover).
 
 - **Execute Python entrypoints cleanly, with script fallback**
+  
   Stages can run via explicit Python entrypoint functions, and plain scripts can still run through subprocess fallback when needed.
 
 - **Capture run metadata for reproducibility**
+  
   Each run records key context (such as timing and configuration details) so results can be traced, repeated, and reviewed later.
 
 - **Built-in logging for visibility and troubleshooting**
+  
   Centralized logs make it easier to understand what happened during a run and where a failure occurred.
 
 - **Separate orchestration config from stage logic**
+  
   Pipeline-level settings (directories, runtime options, metadata) are managed independently from stage business logic, reducing coupling and making it easier to troubleshoot.
 
 - **Share configuration globally or per stage**
+  
   Pass common variables across the pipeline while still allowing stage-specific values where needed.
 
 - **Validate before execution**
+  
   Structural checks help catch invalid stages or dependency problems early, before compute time is wasted.
 
 - **Lightweight by design**
+  
   It is intentionally small and focused: enough control for RAP standards, without the overhead of a heavyweight workflow platform.
 
 ## Getting started
@@ -85,7 +95,7 @@ python -m pip install -U pip setuptools
 pip install -e .
 ```
 
-> The package is not currently available on PyPI however this is a route for future development.
+*The package is not currently available on PyPI however this is a route for future development.*
 
 ### Install for contributors (Python only)
 
