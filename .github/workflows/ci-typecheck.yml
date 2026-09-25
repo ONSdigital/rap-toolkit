@@ -3,6 +3,9 @@ name: Type Check
 on:
   push:
     branches: ["main", "development", "release_staging"]
+  pull_request:
+    branches: ["main", "development", "release_staging"]
+    types: ["ready_for_review"]
   workflow_dispatch:
 
 jobs:

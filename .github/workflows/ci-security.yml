@@ -3,6 +3,9 @@ name: Security
 on:
   push:
     branches: ["main", "release_staging"]
+  pull_request:
+    branches: ["main", "release_staging"]
+    types: ["ready_for_review"]
   workflow_dispatch:
 
 jobs:
