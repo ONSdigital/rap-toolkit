@@ -48,7 +48,7 @@ source_suffix = {
 master_doc = "index"
 
 # General information about the project.
-project = "rap-framework"
+project = "rap-toolkit"
 author = "ONSDigital"
 
 # The version info for the project you're documenting, acts as replacement for
