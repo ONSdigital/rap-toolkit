@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import StageExecutionError
 from .execution import ExecutionContext
@@ -223,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
     Enables stages to be input, followed by a name if provided.
     """
     parser = argparse.ArgumentParser(
-        description="Run an onsrap pipeline from Python files."
+        description="Run a `rap-toolkit` pipeline from Python files."
     )
     parser.add_argument(
         "stages", nargs="+", help="One or more Python stage files to run."

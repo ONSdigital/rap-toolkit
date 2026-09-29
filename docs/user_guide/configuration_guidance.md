@@ -75,7 +75,7 @@ It should be a **single .yaml file** that contains all three types of configurat
 
 ```shell
 .
-├── onsrap/                     
+├── rap_toolkit/                     
 ├── examples/                   
 │   ├── pipeline_2/             
 │   │   ├── data/
@@ -109,7 +109,7 @@ Once the file is written, how do you use it to create a ``Pipeline``?
 An example is seen in the example pipeline_2 ``main.py`` file:
 ```shell
 .
-├── onsrap/                     
+├── rap_toolkit/                     
 ├── examples/                   
 │   ├── pipeline_2/             
 │   │   ├── data/

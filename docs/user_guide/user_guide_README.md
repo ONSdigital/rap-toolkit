@@ -1,6 +1,6 @@
 # User guide
 
-This is the user guide for the `onsrap` project.
+This is the user guide for the `rap-toolkit` project.
 
 ```{toctree}
 :maxdepth: 2

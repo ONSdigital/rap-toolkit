@@ -4,8 +4,8 @@ from textwrap import dedent
 
 import pytest
 
-from onsrap.file_system_setup import FileSystemSetUp
-from onsrap.models import (
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.models import (
     PipelineConfig,
     PipelineRun,
     PipelineStatus,

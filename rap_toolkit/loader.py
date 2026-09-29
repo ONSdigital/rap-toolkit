@@ -8,7 +8,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import StageConfigurationError, StageLoadError
 from .models import PipelineRun
@@ -22,7 +22,7 @@ def discover_python_entrypoint(
     """
     Inspect a Python stage file and return the preferred callable entrypoint name.
 
-    onsrap stages are intentionally lightweight: a stage can be a plain Python
+    `rap-toolkit` stages are intentionally lightweight: a stage can be a plain Python
     file, but the execution layer still needs a concrete function to call when
     one is available. This helper does a shallow AST scan for the project's
     preferred entrypoints, ``run``, ``main``, and ``execute``, without importing
@@ -120,7 +120,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     The architecture treats stage files as user-owned execution units, not as
     part of the package's own import graph. To preserve that boundary, this
     helper loads the file under a generated module name instead of importing it
-    by package path. That lets onsrap execute local stage code without requiring
+    by package path. That lets `rap-toolkit` execute local stage code without requiring
     the user to restructure it into an installed module.
 
     The generated name is derived from the file path so repeated loads of the
@@ -153,7 +153,7 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
             "Stage source file does not exist in the data path: {0}".format(file_system)
         )
 
-    module_name = "onsrap_stage_{0}_{1}".format(
+    module_name = "rap_toolkit_stage_{0}_{1}".format(
         Path(path.file_name).stem,
         hashlib.sha256(
             str(file_system.resolve(type="data")).encode("utf-8")

@@ -4,7 +4,7 @@ import botocore
 import pytest
 from moto import mock_aws
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def mock_raz_client():
     This allows tests to validate raz_client integration without requiring
     actual SSL certificates or the raz_client library to be installed.
     """
-    with patch("onsrap.file_system_setup.configure_ranger_raz") as mock_configure:
+    with patch("rap_toolkit.file_system_setup.configure_ranger_raz") as mock_configure:
         mock_configure.return_value = None
         yield mock_configure
 
@@ -886,7 +886,7 @@ class TestS3FileSystemRazClientValidation:
         """
         with (
             mock_aws(),
-            patch("onsrap.file_system_setup.configure_ranger_raz", None),
+            patch("rap_toolkit.file_system_setup.configure_ranger_raz", None),
             pytest.raises(ValueError, match="Ranger RAZ client is not installed"),
         ):
             setup = FileSystemSetUp(

@@ -248,7 +248,7 @@ The `rap-toolkit` repository has the following structure:
 
 ```shell
 .
-├── onsrap/                     # Core package code
+├── rap_toolkit/                # Core package code
 │   ├── __init__.py
 │   ├── errors.py
 │   ├── execution.py
@@ -299,7 +299,7 @@ The `rap-toolkit` repository has the following structure:
 
 ## Contributing
 
-If you want to help us build and improve `onsrap`, please take a look at our [contributing guidelines][contributing].
+If you want to help us build and improve `rap-toolkit`, please take a look at our [contributing guidelines][contributing].
 
 ## Acknowledgements
 

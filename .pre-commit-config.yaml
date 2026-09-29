@@ -27,11 +27,11 @@ repos:
   - repo: local
     hooks:
       - id: mypy
-        name: mypy - Type check onsrap package
+        name: mypy - Type check `rap-toolkit` package
         entry: mypy
         language: python
         additional_dependencies: [mypy, types-PyYAML, boto3-stubs, botocore-stubs]
-        args: [onsrap]
+        args: [rap_toolkit]
         pass_filenames: false
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0

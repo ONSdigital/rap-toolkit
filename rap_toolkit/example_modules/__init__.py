@@ -1,4 +1,4 @@
-"""Compatibility example modules shipped with onsrap."""
+"""Compatibility example modules shipped with `rap-toolkit`."""
 
 from .example_module import hello_world, print_favourite_number, print_string
 

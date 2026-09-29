@@ -11,7 +11,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import (
     HistoricalPipelineLoadError,

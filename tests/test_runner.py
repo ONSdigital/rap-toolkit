@@ -5,10 +5,10 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from onsrap.execution import ExecutionContext
-from onsrap.file_system_setup import FileSystemSetUp
-from onsrap.logger import Logger
-from onsrap.models import (
+from rap_toolkit.execution import ExecutionContext
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.logger import Logger
+from rap_toolkit.models import (
     PipelineConfig,
     PipelineRun,
     PipelineStatus,
@@ -17,7 +17,7 @@ from onsrap.models import (
     StageStatus,
     now,
 )
-from onsrap.runner import _log_config, _log_pipeline_attributes, print_config_diffs
+from rap_toolkit.runner import _log_config, _log_pipeline_attributes, print_config_diffs
 
 
 class TestLogConfig:

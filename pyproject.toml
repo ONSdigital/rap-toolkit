@@ -57,7 +57,7 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.10"
-files = ["onsrap"]
+files = ["rap_toolkit"]
 show_error_codes = true
 warn_redundant_casts = true
 warn_unused_configs = true

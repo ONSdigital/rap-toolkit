@@ -3,18 +3,18 @@ from unittest.mock import Mock
 
 import pytest
 
-from onsrap.errors import PipelineConfigurationError
-from onsrap.execution import ExecutionContext, PythonStageExecutor
-from onsrap.file_system_setup import FileSystemSetUp
-from onsrap.logger import Logger
-from onsrap.models import (
+from rap_toolkit.errors import PipelineConfigurationError
+from rap_toolkit.execution import ExecutionContext, PythonStageExecutor
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.logger import Logger
+from rap_toolkit.models import (
     GlobalConfig,
     PipelineConfig,
     StageConfig,
     StageResult,
     StageStatus,
 )
-from onsrap.warnings import StageConfigurationWarning
+from rap_toolkit.warnings import StageConfigurationWarning
 
 
 @pytest.fixture

@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Optional, overload
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import PipelineConfigurationError, StageConfigurationError
 
@@ -1141,7 +1141,7 @@ def _format_dict(d: dict[str, Any] | dict[str, bool] | None, indent: int = 0) ->
     return "\n".join(lines)
 
 
-_YAML_TYPE_KEY = "__onsrap_yaml_type__"
+_YAML_TYPE_KEY = "__rap_toolkit_yaml_type__"
 _YAML_VALUE_KEY = "value"
 
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from onsrap import Pipeline
+from rap_toolkit import Pipeline
 
 
 def main() -> None:
