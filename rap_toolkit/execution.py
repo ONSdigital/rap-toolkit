@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
-from onsrap.warnings import StageConfigurationWarning
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.warnings import StageConfigurationWarning
 
 from .errors import (
     PipelineConfigurationError,
@@ -139,6 +139,11 @@ class ExecutionContext:
     def set_active_stage(self, stage_name: str | None) -> None:
         """
         Mark the stage currently being executed so ``stage_config`` resolves correctly.
+
+        Parameters
+        ----------
+        ``stage_name`` : str or None
+            Name of the active stage, or ``None`` when no stage is active.
         """
         self.active_stage_name = stage_name
 
@@ -152,6 +157,11 @@ class ExecutionContext:
         the variables dictionary.
 
         This property is ``None`` outside an active stage run.
+
+        Returns
+        -------
+        StageConfig | None
+            The configuration for the active stage, if any.
         """
         return self.stage_config_for(self.active_stage_name)
 
@@ -166,6 +176,12 @@ class ExecutionContext:
         ----------
         ``stage_name`` : str or None
             Name of the stage whose configuration should be returned.
+
+        Returns
+        -------
+        StageConfig | None
+            The matching stage configuration, or ``None`` if no stage name is
+            provided or no configuration is registered.
         """
         if stage_name is None:
             return None
@@ -181,9 +197,8 @@ class ExecutionContext:
 
         Returns
         -------
-        ``stage_outputs``
-            Dictionary containing the name of the stage and the associated outputs of
-            the run.
+        dict[str, Any]
+            Dictionary containing the outputs produced by each completed stage.
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
@@ -191,10 +206,20 @@ class ExecutionContext:
         """
         Establishes the filepath that the data is held in.
 
+        Parameters
+        ----------
+        ``path_type`` : str
+            The representation to return, either ``"uri"`` or ``"path"``.
+
         Returns
         -------
-        str
-            The file path for the location of the data being used in the pipeline.
+        str | Path
+            The data directory in the requested form.
+
+        Raises
+        ------
+        ``PipelineConfigurationError``
+            If the pipeline configuration is missing or the requested path type is invalid.
         """
         if self.config is not None:
             if path_type == "uri":
@@ -217,10 +242,20 @@ class ExecutionContext:
         """
         Establishes the filepath that the outputs are going to be saved to.
 
+        Parameters
+        ----------
+        ``path_type`` : str
+            The representation to return, either ``"uri"`` or ``"path"``.
+
         Returns
         -------
-        str
-            The file path for the outputs of the run to be saved to.
+        str | Path
+            The run output directory in the requested form.
+
+        Raises
+        ------
+        ``PipelineConfigurationError``
+            If the run directory cannot be resolved for the requested path type.
         """
         if self.run_dir is not None:
             if path_type == "uri":
@@ -400,6 +435,12 @@ class ExecutionContext:
         to alert the user that the stage configuration definition will be used as a
         priority.
 
+        Parameters
+        ----------
+        ``stage`` : StageConfig or None, optional
+            Stage configuration to merge with the global values. Defaults to the
+            active stage configuration.
+
         Returns
         -------
         ``combined``: dict[str, Any]
@@ -455,7 +496,19 @@ class StageExecutor(Protocol):
 
     def execute(self, stage: Stage, context: ExecutionContext) -> StageResult:
         """
-        Method to run ``Stage`` however implementation required
+        Execute a stage.
+
+        Parameters
+        ----------
+        ``stage`` : Stage
+            Stage to execute.
+        ``context`` : ExecutionContext
+            Execution context for the current pipeline run.
+
+        Returns
+        -------
+        StageResult
+            Result produced by the stage executor.
         """
         ...
 
@@ -483,8 +536,8 @@ class PythonStageExecutor:
         """
         Main function to select how ``Stage`` is run.
 
-        Identifies the type of ``source`` within the ``Stage`` and runs the relevant
-        function for that type.
+        Identifies the type of ``source`` within the ``Stage`` and runs the
+        relevant function for that type.
 
         Parameters
         ----------
@@ -494,14 +547,15 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
-        ------
-        ``StageResult`` instance.
+        Returns
+        -------
+        StageResult
+            Result produced by the stage execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
-            If the ``source`` is not a Path or a callable object.
+            If the stage source is not executable.
         """
         if callable(stage.source):
             return self._execute_callable(
@@ -546,14 +600,15 @@ class PythonStageExecutor:
         ``source_label`` : str or None
             The type of ``source`` for the ``Stage``.
 
-        Return
-        ------
-        ``StageResult`` class instance
+        Returns
+        -------
+        StageResult
+            Result produced by the callable execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
-            If the callable object cannot be run
+            If the callable object cannot be run.
         """
         started_at = now()
         context.logger.event(
@@ -603,19 +658,10 @@ class PythonStageExecutor:
 
     def _execute_file(self, stage: Stage, context: ExecutionContext) -> StageResult:
         """
-        Attempt to run a file.
-        Attempt to run a callable object.
+        Run a stage from a Python file.
 
-        Calls the logger.event() method to record an event and attempts to run
-        the callable parsed. If the callable cannot be run, an error is flagged and
-        the ``StageResult`` instance created shows a failure. If it can be run, the
-        callable is run and the ``StageResult`` instance shows a success. Metadata
-        is kept for the attempt including ``duration``, ``name``, ``outputs``, ``source``,
-         ``mode`` attempted, and ``errors``.
-        If there is no entrypoint or the entrypoint is not a callable object, an error will be
-        raised. ``_execute_subprocess()`` method called if no entrypoint is found. A
-        ``StageResult`` instance will be created to log the results of the ``Stage``run regardless
-        of success or failure.
+        If the file defines a preferred entrypoint, that callable is loaded and
+        executed. Otherwise, the stage may fall back to subprocess execution.
 
         Parameters
         ----------
@@ -624,16 +670,17 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
-        ------
-        ``StageResult`` class instance
+        Returns
+        -------
+        StageResult
+            Result produced by the stage execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageLoadError``
-            If the entrypoint in the stage is unable to be run.
+            If the entrypoint cannot be loaded.
         ``StageExecutionError``
-            If the entrypoint is not found.
+            If no callable entrypoint is available and subprocess fallback is disabled.
         """
 
         path = stage.source
@@ -707,13 +754,13 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
-        ------
-        ``result``
-            A ``StageResult`` instance holding information on the ``Stage``.
+        Returns
+        -------
+        StageResult
+            Result produced by the subprocess execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
             If the ``Stage`` script was unable to be run successfully.
         """
@@ -888,10 +935,10 @@ def _build_success_result(
     ``source`` : str or None
         The file/callable being run in the stage.
 
-    Return
-    ------
-    ``StageResult`` instance
-        Containing metadata for the stage run and showing that the run was a success.
+    Returns
+    -------
+    StageResult
+        Stage result containing metadata for the successful run.
     """
     if isinstance(output, StageResult):
         if output.name != stage.name:

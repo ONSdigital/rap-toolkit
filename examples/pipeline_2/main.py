@@ -1,13 +1,15 @@
 from pathlib import Path
 
-from onsrap import Pipeline
+from rap_toolkit import Pipeline
 
 
 def main() -> None:
     config_path = (Path(__file__).resolve().parent) / "conf.yaml"
     print(config_path)
 
-    pipeline = Pipeline.from_config(config_path)
+    ssl_file = None
+
+    pipeline = Pipeline.from_config(config_path, ssl_file=ssl_file)
 
     run = pipeline.run()
     report = run.manifest.outputs

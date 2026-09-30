@@ -4,18 +4,18 @@ from unittest import mock
 
 import pytest
 
-from onsrap.errors import (
+from rap_toolkit.errors import (
     HistoricalPipelineLoadError,
     PipelineConfigurationError,
     PipelineInitialisationError,
     StageLoadError,
 )
-from onsrap.execution import PythonStageExecutor
-from onsrap.file_system_setup import FileSystemSetUp
-from onsrap.models import PipelineRun, StageConfig
-from onsrap.pipeline import Pipeline, PipelineConfig
-from onsrap.stage import Stage
-from onsrap.warnings import PipelineConfigurationWarning, StageConfigurationWarning
+from rap_toolkit.execution import PythonStageExecutor
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.models import PipelineRun, StageConfig
+from rap_toolkit.pipeline import Pipeline, PipelineConfig
+from rap_toolkit.stage import Stage
+from rap_toolkit.warnings import PipelineConfigurationWarning, StageConfigurationWarning
 
 NO_STAGES_WARNING = "No stages specified to run. All stages running by default."
 
@@ -881,7 +881,7 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
 
         mock_load_historical_run = mock.MagicMock(return_value=expected_run)
         monkeypatch.setattr(
-            "onsrap.pipeline.load_historical_run", mock_load_historical_run
+            "rap_toolkit.pipeline.load_historical_run", mock_load_historical_run
         )
 
         result = pipeline_no_history._load_latest_run()
@@ -934,7 +934,7 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
 
         mock_load_historical_run = mock.MagicMock(return_value=expected_run)
         monkeypatch.setattr(
-            "onsrap.pipeline.load_historical_run", mock_load_historical_run
+            "rap_toolkit.pipeline.load_historical_run", mock_load_historical_run
         )
 
         pipeline_no_history._load_latest_run()
@@ -983,7 +983,7 @@ class TestLoadLatestRun(TestLoadLatestRunIntegration):
 
         mock_load_historical_run = mock.MagicMock(return_value=expected_run)
         monkeypatch.setattr(
-            "onsrap.pipeline.load_historical_run", mock_load_historical_run
+            "rap_toolkit.pipeline.load_historical_run", mock_load_historical_run
         )
 
         with warnings.catch_warnings(record=True) as w:
@@ -1045,7 +1045,7 @@ class TestLoadLatestIntegrationInPipeline(TestLoadLatestRunIntegration):
         """
         logs = tmp_path / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        (logs / "onsrap.log").write_text(
+        (logs / "rap-toolkit.log").write_text(
             "2026-08-11 10:00:00,000 Pipeline started | "
             '{"run_id": "2026-08-11_100000_abc12345", '
             '"name": "test_pipeline", '
@@ -1098,7 +1098,7 @@ class TestLoadLatestIntegrationInPipeline(TestLoadLatestRunIntegration):
 
         logs = tmp_path / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        (logs / "onsrap.log").write_text(
+        (logs / "rap-toolkit.log").write_text(
             "2026-08-11 10:00:00,000 Pipeline started | "
             '{"run_id": "run_older", '
             '"name": "test_pipeline", '
@@ -1169,7 +1169,7 @@ class TestLoadLatestIntegrationInPipeline(TestLoadLatestRunIntegration):
 
         logs = tmp_path / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        (logs / "onsrap.log").write_text(
+        (logs / "rap-toolkit.log").write_text(
             "2026-08-11 10:00:00,000 Pipeline started | "
             '{"name": "test_pipeline", "run_id": "run_older", '
             ' "run_dir": "/path/to/run"}\n'
@@ -1297,7 +1297,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         """
 
         mock_loader = mock.MagicMock(return_value=mock.sentinel)
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1348,7 +1348,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         mock_loader = mock.MagicMock(
             side_effect=[mock.sentinel.run_A, mock.sentinel.run_B]
         )
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1401,7 +1401,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
             A Pipeline instance with no historical runs.
         """
         mock_loader = mock.MagicMock(return_value=mock.sentinel)
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1478,7 +1478,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         )
 
         monkeypatch.setattr(
-            "onsrap.pipeline.load_historical_run",
+            "rap_toolkit.pipeline.load_historical_run",
             mock.Mock(side_effect=[mock.sentinel.good_run, StageLoadError("test")]),
         )
 
@@ -1529,7 +1529,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         )
 
         monkeypatch.setattr(
-            "onsrap.pipeline.load_historical_run",
+            "rap_toolkit.pipeline.load_historical_run",
             mock.Mock(side_effect=[StageLoadError("test"), StageLoadError("test")]),
         )
 
@@ -1562,7 +1562,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         mock_loader = mock.MagicMock(
             side_effect=[mock.sentinel.run_A, mock.sentinel.run_B]
         )
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1612,7 +1612,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
             the all_runs attribute will be None.
         """
         mock_loader = mock.MagicMock(return_value=mock.sentinel)
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1660,7 +1660,7 @@ class TestLoadAllRunsUnitTests(TestLoadLatestRunIntegration):
         mock_loader = mock.MagicMock(
             side_effect=[mock.sentinel.first_loaded, mock.sentinel.second_loaded]
         )
-        monkeypatch.setattr("onsrap.pipeline.load_historical_run", mock_loader)
+        monkeypatch.setattr("rap_toolkit.pipeline.load_historical_run", mock_loader)
 
         monkeypatch.setattr(
             pipeline_no_history.logger,
@@ -1740,7 +1740,7 @@ class TestLoadAllRunsIntegration(TestLoadLatestRunIntegration):
 
         logs = tmp_path / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        (logs / "onsrap.log").write_text(
+        (logs / "rap-toolkit.log").write_text(
             "2026-08-11 10:00:00,000 Pipeline started | "
             '{"run_id": "run_older", '
             ' "name": "test_pipeline",'
@@ -1814,7 +1814,7 @@ class TestLoadAllRunsIntegration(TestLoadLatestRunIntegration):
 
         logs = tmp_path / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        (logs / "onsrap.log").write_text(
+        (logs / "rap-toolkit.log").write_text(
             "2026-08-11 10:00:00,000 Pipeline started | "
             '{"run_id": "run_older", '
             '"name": "test_pipeline",'

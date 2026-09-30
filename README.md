@@ -1,13 +1,5 @@
 # `rap-toolkit`
 
-[![Lint](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml)
-[![Security](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml)
-[![Type Check](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml)
-[![Tests](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml)
-[![Build](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml)
-[![Coverage](https://codecov.io/gh/ONSdigital/onsrap/branch/main/graph/badge.svg)](https://codecov.io/gh/ONSdigital/onsrap)
-
-A simple Pipeline orchestration package.
 *A simple Pipeline orchestration package.*
 
 [![Lint](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml)
@@ -256,7 +248,7 @@ The `rap-toolkit` repository has the following structure:
 
 ```shell
 .
-├── onsrap/                     # Core package code
+├── rap_toolkit/                # Core package code
 │   ├── __init__.py
 │   ├── errors.py
 │   ├── execution.py
@@ -307,7 +299,7 @@ The `rap-toolkit` repository has the following structure:
 
 ## Contributing
 
-If you want to help us build and improve `onsrap`, please take a look at our [contributing guidelines][contributing].
+If you want to help us build and improve `rap-toolkit`, please take a look at our [contributing guidelines][contributing].
 
 ## Acknowledgements
 

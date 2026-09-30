@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import StageExecutionError
 from .execution import ExecutionContext
@@ -81,6 +81,11 @@ class PipelineRunner:
         ----------
         ``pipeline`` : Pipeline
             A Pipeline instance that this method will run.
+
+        Returns
+        -------
+        PipelineRun
+            The completed pipeline run metadata.
 
         Raises
         ------
@@ -221,9 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
     Determines what arguments are needed when running a Pipeline from the command line.
 
     Enables stages to be input, followed by a name if provided.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured for the command line interface.
     """
     parser = argparse.ArgumentParser(
-        description="Run an onsrap pipeline from Python files."
+        description="Run a `rap-toolkit` pipeline from Python files."
     )
     parser.add_argument(
         "stages", nargs="+", help="One or more Python stage files to run."
@@ -271,14 +281,11 @@ def _log_pipeline_attributes(
     Parameters
     ----------
     ``pipeline_run`` : PipelineRun
-        The PipelineRun instance for the current run of the pipeline.
-    ``stage_results`` : list[StageResult]
-        A list of StageResult instances for the current run of the pipeline.
+        The pipeline run to serialize.
     ``run_dir`` : FileSystemSetUp
-        The directory where the pipeline run is being currently being executed.
+        The directory where the pipeline run is being executed.
     ``context`` : ExecutionContext
-        The context of the current pipeline run, containing configuration and
-        state information.
+        The context for the current pipeline run.
     """
     attributes_file = FileSystemSetUp.file_system_setup_factory(
         run_dir, path_type="dir"
@@ -308,9 +315,9 @@ def _log_config(
     ``run_dir`` : FileSystemSetUp
         The directory where the pipeline run is being executed.
     ``context`` : ExecutionContext
-        The context of the current pipeline run, containing configuration and state information.
+        The context of the current pipeline run.
     ``manifest`` : RunManifest
-        The manifest of the current pipeline run, containing metadata and outputs.
+        The manifest for the current pipeline run.
     """
     date = context.started_at.date()
     config_file = FileSystemSetUp(
@@ -413,7 +420,7 @@ def _print_diff(diff: dict) -> dict:
 
     Parameters
     ----------
-    diff : dict
+    ``diff`` : dict
         A dictionary describing the differences between two YAML files, structured as
         {changed: {}, added: {}, removed: {}}.
 

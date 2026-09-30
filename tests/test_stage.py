@@ -3,9 +3,9 @@ from textwrap import dedent
 
 import pytest
 
-from onsrap.errors import StageDependencyError
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
-from onsrap.stage import Stage, StageConfigurationError, _normalize_dependencies
+from rap_toolkit.errors import StageDependencyError
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.stage import Stage, StageConfigurationError, _normalize_dependencies
 
 
 class TestNormalizeDependencies:

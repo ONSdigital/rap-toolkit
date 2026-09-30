@@ -25,4 +25,4 @@ jobs:
         python -m pip install -e ".[dev]"
     - name: Run security checks
       run: |
-        python -m bandit -ll -c pyproject.toml -r onsrap
+        python -m bandit -ll -c pyproject.toml -r rap_toolkit

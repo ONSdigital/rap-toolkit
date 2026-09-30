@@ -1,6 +1,6 @@
 # Contributing guide
 
-This is the contributor guide for the `onsrap` project.
+This is the contributor guide for the `rap-toolkit` project.
 
 ```{toctree}
 :maxdepth: 2

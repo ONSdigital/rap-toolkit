@@ -8,12 +8,12 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from onsrap.errors import StageConfigurationError
-from onsrap.file_system_setup import FileSystemSetUp
-from onsrap.graph import StageGraph
-from onsrap.pipeline import Pipeline
-from onsrap.stage import Stage
-from onsrap.warnings import PipelineConfigurationWarning, StageConfigurationWarning
+from rap_toolkit.errors import StageConfigurationError
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.graph import StageGraph
+from rap_toolkit.pipeline import Pipeline
+from rap_toolkit.stage import Stage
+from rap_toolkit.warnings import PipelineConfigurationWarning, StageConfigurationWarning
 
 NO_STAGES_SPECIFIED_WARNING = (
     "No stages specified to run. All stages running by default."

@@ -25,4 +25,4 @@ jobs:
         python -m pip install -e ".[dev]"
     - name: Type check with mypy
       run: |
-        python -m mypy onsrap
+        python -m mypy rap_toolkit

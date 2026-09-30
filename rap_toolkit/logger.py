@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from onsrap.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import HistoricalPipelineLoadError
 
@@ -22,13 +22,13 @@ class LogConfig:
         The directory where all logs are stored for the Pipeline.
     ``log_level`` : str, default = "INFO"
         Denotes how severe the log message is.
-    ``logger_name`` : str, default = "onsrap"
+    ``logger_name`` : str, default = "rap-toolkit"
         The name of the logging system.
     """
 
     log_dir: FileSystemSetUp
     log_level: str = "INFO"
-    logger_name: str = "onsrap"
+    logger_name: str = "rap-toolkit"
 
 
 class Logger:
@@ -80,7 +80,7 @@ class Logger:
 
             try:
                 file_handler = logging.FileHandler(
-                    self.file_system.join_path("onsrap.log"), encoding="utf-8"
+                    self.file_system.join_path("rap-toolkit.log"), encoding="utf-8"
                 )
                 file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
                 self._logger.addHandler(file_handler)
@@ -97,6 +97,13 @@ class Logger:
         Positional arguemnts are converted to strings and joined with spaces.
         Keyword arguments are serialised as JSON and appended as structured
         context.
+
+        Parameters
+        ----------
+        ``*args`` : Any
+            Positional message parts to join into the log message.
+        ``**kwargs`` : Any
+            Structured context values to serialize into the log entry.
         """
         message = " ".join(str(arg) for arg in args)
         if kwargs:
@@ -183,6 +190,11 @@ class Logger:
         -------
         list[dict[str, Any]]
             A list of dictionaries containing run_id, timestamp, and run_dir for each historical run.
+
+        Raises
+        ------
+        ``HistoricalPipelineLoadError``
+            If the logger cannot be inspected for historical run data.
         """
 
         # confirms that run_root is a FileSystemSetUp instance and if not, creates it

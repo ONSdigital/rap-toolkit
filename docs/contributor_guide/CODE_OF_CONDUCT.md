@@ -1,4 +1,4 @@
-# Code of conduct for `onsrap`
+# Code of conduct for `rap-toolkit`
 
 All contributors to this repository hosted by `ONSDigital` are expected to follow the
 Contributor Covenant Code of Conduct. Those working within HM Government are also expected to follow the [Civil Service
@@ -10,7 +10,7 @@ Code][civil-service-code].
 
 Where this Code of Conduct says:
 
-- "Project", we mean this GitHub repository, `onsrap` ;
+- "Project", we mean this GitHub repository, `rap-toolkit` ;
 - "Maintainer", we mean active developers of the primary project team(s) behind `ONSDigital`; and
 - "Leadership", we mean `ONSDigital` organisation owners, line managers, and other
   leadership within the Office for National Statistics.
