@@ -24,13 +24,13 @@ def _normalize_dependencies(
 
     Parameters
     ----------
-    dependencies : Iterable[str] | str | None
+    ``dependencies`` : Iterable[str] | str | None
         Dependency names to standardise. ``None`` returns an empty tuple. A
         string is treated as a single entry in the tuple. Any iterable is converted
         into a sequence of names.
     Returns
     -------
-    normalized : tuple
+    tuple[str, ...]
         A tuple of cleaned dependency names.
     """
     if dependencies is None:
@@ -176,7 +176,7 @@ class Stage:
 
         Raises
         ------
-        StageConfigurationError
+        ``StageConfigurationError``
             If the file path does not exist
 
         Returns
@@ -327,6 +327,11 @@ class Stage:
         -------
         ``Stage``
             ``Stage`` class instance with normalised ``dependencies`` attribute.
+
+        Raises
+        ------
+        ``StageDependencyError``
+            If a nested dependency list is provided.
         """
         unpacked_deps: list[str] = []
         for dependency in dependencies:
@@ -418,20 +423,24 @@ class Stage:
 
     def run(self, context: ExecutionContext, executor: StageExecutor) -> StageResult:
         """
-        Checks that the ``source`` is valid and then runs the ``source``
+        Check that the source is valid and then run it.
 
-        Properties
+        Parameters
         ----------
-        context : set value "ExecutionContext"
-            Uses ``ExecutionContext`` class information to provide required metadata on running ``source``.
-            Any stage-specific configuration resolved by the ``Pipeline`` is available through
-            ``context.stage_config`` while this stage is running.
-        executor : set value "StageExecutor"
-            Uses ``StageExecutor`` class to extract the ``.execute`` method to actually run the ``source``.
+        ``context`` : ExecutionContext
+            Execution context for the current pipeline run.
+        ``executor`` : StageExecutor
+            Executor responsible for running the stage source.
 
         Returns
         -------
-        ``execute`` method of the ``StageExecutor`` class stored in the ``StageResult`` class.
+        StageResult
+            Result produced by the executor.
+
+        Raises
+        ------
+        ``StageConfigurationError``
+            If the stage source is invalid.
         """
         self.validate()
         return executor.execute(self, context)

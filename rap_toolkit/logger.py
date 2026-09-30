@@ -97,6 +97,13 @@ class Logger:
         Positional arguemnts are converted to strings and joined with spaces.
         Keyword arguments are serialised as JSON and appended as structured
         context.
+
+        Parameters
+        ----------
+        ``*args`` : Any
+            Positional message parts to join into the log message.
+        ``**kwargs`` : Any
+            Structured context values to serialize into the log entry.
         """
         message = " ".join(str(arg) for arg in args)
         if kwargs:
@@ -183,6 +190,11 @@ class Logger:
         -------
         list[dict[str, Any]]
             A list of dictionaries containing run_id, timestamp, and run_dir for each historical run.
+
+        Raises
+        ------
+        ``HistoricalPipelineLoadError``
+            If the logger cannot be inspected for historical run data.
         """
 
         # confirms that run_root is a FileSystemSetUp instance and if not, creates it

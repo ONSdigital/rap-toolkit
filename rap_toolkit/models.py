@@ -39,6 +39,11 @@ class PipelineStatus(str, Enum):
 def now() -> datetime:
     """
     Function to extract the current time in a datetime format.
+
+    Returns
+    -------
+    datetime
+        The current local time.
     """
     return datetime.now()
 
@@ -46,6 +51,11 @@ def now() -> datetime:
 def utcnow() -> datetime:
     """
     Function to extract the current time in UTC in a datetime format.
+
+    Returns
+    -------
+    datetime
+        The current time in UTC.
     """
     return now()
 
@@ -77,24 +87,44 @@ class RuntimeID:
     def get_id(self) -> str:
         """
         Getter function to extract the ``id`` attribute.
+
+        Returns
+        -------
+        str
+            The runtime ID string.
         """
         return self.id
 
     def get_timestamp(self) -> datetime:
         """
         Getter function to extract the ``timestamp`` attribute.
+
+        Returns
+        -------
+        datetime
+            The runtime timestamp.
         """
         return self.timestamp
 
     def get_hash(self) -> str:
         """
         Getter function to extract the ``hash`` attribute.
+
+        Returns
+        -------
+        str
+            The runtime hash.
         """
         return self.hash
 
     def get_short_hash(self) -> str:
         """
         Getter function to extract the ``short_hash`` attribute.
+
+        Returns
+        -------
+        str
+            The shortened runtime hash.
         """
         return self.short_hash
 
@@ -547,18 +577,50 @@ class StageConfig:
     def variables(self) -> dict[str, Any]:
         """
         Return a copy of the stage variables without datasets or metadata.
+
+        Returns
+        -------
+        dict[str, Any]
+            A shallow copy of the configured stage variables.
         """
         return dict(self._variables)
 
     def get(self, variable: str, default: Any = None) -> Any:
         """
         Return a configured variable if present, otherwise return ``default``.
+
+        Parameters
+        ----------
+        ``variable`` : str
+            Name of the variable to look up.
+        ``default`` : Any, optional
+            Value to return if the variable is not defined.
+
+        Returns
+        -------
+        Any
+            The configured value or ``default``.
         """
         return self._variables.get(variable, default)
 
     def require(self, variable: str) -> Any:
         """
         Return a configured variable and raise if the stage does not define it.
+
+        Parameters
+        ----------
+        ``variable`` : str
+            Name of the variable to look up.
+
+        Returns
+        -------
+        Any
+            The configured value.
+
+        Raises
+        ------
+        ``StageConfigurationError``
+            If the variable is not defined.
         """
         if variable not in self._variables:
             raise StageConfigurationError(
@@ -569,6 +631,21 @@ class StageConfig:
     def get_variables(self, variable: Iterable[str] | str | None = None) -> Any:
         """
         Return all configured variables, one configured variable, or a selected subset.
+
+        Parameters
+        ----------
+        ``variable`` : Iterable[str] | str | None, optional
+            Variable name or names to return.
+
+        Returns
+        -------
+        Any
+            The selected variable values.
+
+        Raises
+        ------
+        ``StageConfigurationError``
+            If any requested variable is not defined.
         """
         if variable is None:
             return dict(self._variables)
@@ -595,6 +672,11 @@ class StageConfig:
     def to_dict(self) -> dict[str, Any]:
         """
         Serialize the stage configuration back to a mapping suitable for manifests.
+
+        Returns
+        -------
+        dict[str, Any]
+            Mapping representation of the stage configuration.
         """
         data = dict(self._variables)
         if self.metadata:
@@ -951,6 +1033,11 @@ class StageResult:
         Creates a new attribute in the ``StageResult`` class called ``succeeded`` that
         contains a boolean value indicating if the run was a success or not.
         Updates the ``status`` attribute to record that the Stage ran successfully.
+
+        Returns
+        -------
+        bool
+            ``True`` when the stage completed successfully.
         """
         return self.status == StageStatus.SUCCEEDED
 
@@ -959,6 +1046,11 @@ class StageResult:
         """
         Creates a new attribute in the ``StageResult`` class called ``duration_seconds``
         that holds the exact duration of the stage in seconds.
+
+        Returns
+        -------
+        float
+            Stage runtime in seconds.
         """
         return max((self.finished_at - self.started_at).total_seconds(), 0.0)
 
@@ -999,6 +1091,11 @@ class PipelineRun:
         ----------
         ``stage_name`` : str
             The name of the Stage that you are requesting the results for.
+
+        Returns
+        -------
+        StageResult | None
+            The matching stage result, if it exists.
         """
         for result in self.stage_results:
             if result.name == stage_name:
@@ -1151,6 +1248,11 @@ def _yaml_safe_mapping_key(value: Any) -> str | int | float | bool | None:
 
     Complex key types are coerced to strings because YAML mappings require
     hashable scalar-like keys to round-trip predictably with ``yaml.safe_load``.
+
+    Returns
+    -------
+    str | int | float | bool | None
+        A YAML-safe mapping key.
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -1164,6 +1266,11 @@ def _yaml_safe_mapping_key(value: Any) -> str | int | float | bool | None:
 def _yaml_safe_encode(value: Any) -> Any:
     """
     Convert arbitrary Python values into structures accepted by ``yaml.safe_dump``.
+
+    Returns
+    -------
+    Any
+        A YAML-safe encoded value.
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -1239,6 +1346,11 @@ def _yaml_safe_encode(value: Any) -> Any:
 def _yaml_safe_decode(value: Any) -> Any:
     """
     Decode values previously produced by ``_yaml_safe_encode``.
+
+    Returns
+    -------
+    Any
+        The decoded Python value.
     """
     if isinstance(value, list):
         return [_yaml_safe_decode(item) for item in value]

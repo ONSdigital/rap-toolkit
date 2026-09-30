@@ -36,11 +36,9 @@ def discover_python_entrypoint(
 
     Returns
     -------
-    String item containing the name of the ``PREFERRED_ENTRYPOINTS`` item relevant
-    for the stages.
-    ``None`` when the file exists but does not define a preferred
-    callable, which signals to the executor that it should treat the file as a
-    script-style stage instead.
+    str | None
+        The first preferred entrypoint found in the stage file, or ``None`` if
+        no preferred callable is defined.
 
     Raises
     ------
@@ -100,8 +98,8 @@ def load_python_callable(path: FileSystemSetUp, entrypoint: str) -> Any:
 
     Returns
     -------
-    ``target``
-        The ``entrypoint`` attribute of the module called to run the stage.
+    Any
+        The callable bound to ``entrypoint`` in the loaded stage module.
     """
     module = load_python_module(path)
     target = getattr(module, entrypoint, None)
@@ -134,14 +132,13 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
 
     Returns
     -------
-    ``module``
-        The set of code being run for the stage.
+    ModuleType
+        The imported module object for the stage source.
 
     Raises
     ------
     ``StageLoadError``
-        If the file is unable to be imported so callers can report a stage-specific
-        problem rather than a raw import exception.
+        If the stage file cannot be imported.
     """
     file_system = FileSystemFactory.create(path)
     if path.file_name is None:
@@ -182,6 +179,11 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
 def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
     """
     Load a previously executed pipeline run from a YAML file.
+
+    Parameters
+    ----------
+    ``run_dir`` : str | Path | FileSystemSetUp
+        The directory containing the saved historical run data.
 
     Returns
     -------

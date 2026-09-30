@@ -1162,9 +1162,9 @@ class Pipeline:
 
         Raises
         ------
-        StageConfigurationError
+        ``StageConfigurationError``
             If the overwrite parameter in the PipelineConfig is set to False and the output directory already exists.
-        StageConfigurationWarning
+        ``StageConfigurationWarning``
             If the overwrite parameter in the PipelineConfig is set to True and the output directory already exists.
         """
 

@@ -30,6 +30,16 @@ def _text_wrapper_buffer(temp_file: SpooledTemporaryFile) -> IO[bytes]:
 
     Python 3.10's SpooledTemporaryFile does not fully expose the BufferedIOBase
     interface expected by TextIOWrapper, so use the underlying file object there.
+
+    Parameters
+    ----------
+    ``temp_file`` : SpooledTemporaryFile
+        The temporary file object to wrap.
+
+    Returns
+    -------
+    IO[bytes]
+        A binary buffer that TextIOWrapper can use safely.
     """
     if sys.version_info[:2] == (3, 10):
         return cast(IO[bytes], temp_file._file)
@@ -583,7 +593,7 @@ class LocalFileSystem:
 
         Raises
         ------
-        ValueError
+        ``ValueError``
             If the type specified is not 'dir' or 'data'.
         """
         if type == "dir":
