@@ -21,16 +21,14 @@ def mock_raz_client():
 
 
 @pytest.fixture
-def aws_credentials():
+def aws_credentials(monkeypatch):
     """Mocked AWS Credentials for moto."""
-    import os
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"  # pragma: allowlist secret
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")  # pragma: allowlist secret
     # secret allowed as this is a fake key for mocking/testing purposes only
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
 
 @pytest.fixture
