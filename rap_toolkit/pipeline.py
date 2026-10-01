@@ -635,12 +635,14 @@ class Pipeline:
         try:
             latest_run = (
                 FileSystemSetUp.file_system_setup_factory(
-                    self.run_output, path_type="dir"
+                    self.run_output, path_type="dir", ssl_file=self.config.ssl_file
                 ).create_uri()
                 + "/"
                 + str(latest_run_id)
             )
-            return load_historical_run(run_dir=latest_run)
+            return load_historical_run(
+                run_dir=latest_run, ssl_file=self.config.ssl_file
+            )
         except StageLoadError:
             warnings.warn(
                 "Historical run file does not exist. Last_run attribute will be None.",
@@ -691,10 +693,11 @@ class Pipeline:
             try:
                 all_runs[run_id] = load_historical_run(
                     run_dir=FileSystemSetUp.file_system_setup_factory(
-                        self.run_output, path_type="dir"
+                        self.run_output, path_type="dir", ssl_file=self.config.ssl_file
                     ).create_uri()
                     + "/"
-                    + str(run_id)
+                    + str(run_id),
+                    ssl_file=self.config.ssl_file,
                 )
             except StageLoadError:
                 warnings.warn(
@@ -721,7 +724,7 @@ class Pipeline:
         """
         if self.config.output_dir is not None:
             run_output = FileSystemSetUp.file_system_setup_factory(
-                self.config.output_dir, path_type="dir"
+                self.config.output_dir, path_type="dir", ssl_file=self.config.ssl_file
             )
         else:
             warnings.warn(
@@ -729,14 +732,18 @@ class Pipeline:
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
             run_output = FileSystemSetUp.file_system_setup_factory(
-                self.config.project_root or self.config.work_dir, path_type="dir"
+                self.config.project_root or self.config.work_dir,
+                path_type="dir",
+                ssl_file=self.config.ssl_file,
             )
 
         if run_output.workspace_path is None:
             run_output.workspace_path = "/runs"
         else:
             run_output.workspace_path = run_output.workspace_path + "/runs"
-        return FileSystemSetUp.file_system_setup_factory(run_output, path_type="dir")
+        return FileSystemSetUp.file_system_setup_factory(
+            run_output, path_type="dir", ssl_file=self.config.ssl_file
+        )
 
     def _coerce_stage(
         self,
@@ -774,10 +781,18 @@ class Pipeline:
             return Stage.from_callable(stage)
 
         if isinstance(stage, Path):
-            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", ssl_file=self.config.ssl_file
+                )
+            )
 
         if isinstance(stage, str):
-            return Stage.from_file(FileSystemSetUp.from_any(stage, path_type="file"))
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", ssl_file=self.config.ssl_file
+                )
+            )
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -1987,7 +2002,9 @@ class Pipeline:
             file_system_work_dir = FileSystemFactory.create(work_dir)
             return str(file_system_work_dir.dir_path) + "/scripts/" + f"{stage_name}.py"
 
-        candidate_fs_setup = FileSystemSetUp.from_any(location, path_type="file")
+        candidate_fs_setup = FileSystemSetUp.from_any(
+            location, path_type="file", ssl_file=work_dir.ssl_file
+        )
         candidate_fs = FileSystemFactory.create(candidate_fs_setup)
         candidate = candidate_fs.expand_user()
         candidate_fs = FileSystemFactory.update_fs(candidate, candidate_fs)
@@ -1996,7 +2013,7 @@ class Pipeline:
 
         work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
         work_dir_candidate_fs_setup = FileSystemSetUp.file_system_setup_factory(
-            work_dir_candidate, path_type="file"
+            work_dir_candidate, path_type="file", ssl_file=work_dir.ssl_file
         )
         work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
         if work_dir_candidate_fs.exists(type="data"):

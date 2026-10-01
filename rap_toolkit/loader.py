@@ -176,7 +176,9 @@ def load_python_module(path: FileSystemSetUp) -> ModuleType:
     return module
 
 
-def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
+def load_historical_run(
+    run_dir: str | Path | FileSystemSetUp, ssl_file: str | None = None
+) -> PipelineRun:
     """
     Load a previously executed pipeline run from a YAML file.
 
@@ -190,7 +192,9 @@ def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
     ``PipelineRun``
         An instance of ``PipelineRun`` representing the historical run.
     """
-    run_dir_setup = FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir")
+    run_dir_setup = FileSystemSetUp.file_system_setup_factory(
+        run_dir, path_type="dir", ssl_file=ssl_file
+    )
     file_system = FileSystemFactory.create(run_dir_setup)
 
     search_path = "pipeline_attributes_for_*.yaml"
@@ -201,7 +205,7 @@ def load_historical_run(run_dir: str | Path | FileSystemSetUp) -> PipelineRun:
             "Historical run file does not exist in: {0}".format(run_dir)
         )
     # updates file path with searched full data file
-    file_path = FileSystemSetUp.from_any(files[0])
+    file_path = FileSystemSetUp.from_any(files[0], ssl_file=ssl_file)
     # creates FileSystem from FileSystemSetUp
     update_fs = FileSystemFactory.update_fs(file_path, file_system)
     # resolves file path to ensure full path is available

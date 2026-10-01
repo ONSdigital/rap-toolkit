@@ -1530,7 +1530,11 @@ class FileSystemFactory:
         ``FileSystem``
             An updated instance of the appropriate file system class.
         """
-        setup = FileSystemSetUp.file_system_setup_factory(path, path_type=path_type)
+        setup = FileSystemSetUp.file_system_setup_factory(
+            path,
+            path_type=path_type,
+            ssl_file=fs.setup.ssl_file if hasattr(fs, "setup") else None,
+        )
         fs = cls.create(setup)
         return fs
 

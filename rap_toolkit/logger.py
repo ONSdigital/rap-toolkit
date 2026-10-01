@@ -198,7 +198,9 @@ class Logger:
         """
 
         # confirms that run_root is a FileSystemSetUp instance and if not, creates it
-        run_root = FileSystemSetUp.file_system_setup_factory(run_root, path_type="dir")
+        run_root = FileSystemSetUp.file_system_setup_factory(
+            run_root, path_type="dir", ssl_file=self.log_dir.ssl_file
+        )
 
         # ensure that logger is writing to a file and extract filepath
         if not self._logger.hasHandlers():
@@ -220,7 +222,9 @@ class Logger:
             )
 
         logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
-        logfile_path = FileSystemSetUp.from_any(str(logfile_path), path_type="file")
+        logfile_path = FileSystemSetUp.from_any(
+            str(logfile_path), path_type="file", ssl_file=self.log_dir.ssl_file
+        )
 
         new_fs = FileSystemFactory.update_fs(logfile_path, self.file_system)
 
@@ -268,7 +272,9 @@ class Logger:
             timestamp = f"{parts[0]} {parts[1]}"
 
             run_dir = str(run_root.create_uri() + "/" + run_id)
-            run_dir_setup = FileSystemSetUp.from_any(run_dir, path_type="dir")
+            run_dir_setup = FileSystemSetUp.from_any(
+                run_dir, path_type="dir", ssl_file=self.log_dir.ssl_file
+            )
             run_dir_fs = FileSystemFactory.update_fs(run_dir_setup, self.file_system)
             # only returns run_ids for runs where a run_directory is still present.
 

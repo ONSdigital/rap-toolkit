@@ -100,7 +100,9 @@ class Stage:
 
         if self.source is not None and not callable(self.source):
             self.source = FileSystemSetUp.file_system_setup_factory(
-                self.source, path_type="file"
+                self.source,
+                path_type="file",
+                ssl_file=getattr(self.source, "ssl_file", None),
             )
             if not isinstance(self.source, (FileSystemSetUp, Path, str)):
                 raise StageConfigurationError(
@@ -396,7 +398,9 @@ class Stage:
             return self.source
         if isinstance(self.source, str):
             source_fssetup = FileSystemSetUp.file_system_setup_factory(
-                self.source, path_type="file"
+                self.source,
+                path_type="file",
+                ssl_file=getattr(self.source, "ssl_file", None),
             )
             return source_fssetup.create_path() if source_fssetup else None
         return None

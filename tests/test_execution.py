@@ -511,7 +511,9 @@ class TestResolveGivenPath:
             The expected Path object that should be returned by the method.
         """
         path_name = "data_path"
-        root = FileSystemSetUp(root="project_root", workspace_path="work_dir/data")
+        root = FileSystemSetUp(
+            root="project_root", workspace_path="work_dir/data", ssl_file=None
+        )
 
         base_dir = Path(root.root)
         if root.workspace_path:

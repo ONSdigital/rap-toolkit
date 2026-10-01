@@ -195,27 +195,27 @@ class PipelineConfig:
 
         if not isinstance(self.work_dir, FileSystemSetUp):
             self.work_dir = FileSystemSetUp.file_system_setup_factory(
-                self.work_dir, path_type="dir"
+                self.work_dir, path_type="dir", ssl_file=self.ssl_file
             )
         if self.project_root is not None and not isinstance(
             self.project_root, FileSystemSetUp
         ):
             self.project_root = FileSystemSetUp.file_system_setup_factory(
-                self.project_root, path_type="dir"
+                self.project_root, path_type="dir", ssl_file=self.ssl_file
             )
         if self.output_dir is not None and not isinstance(
             self.output_dir, FileSystemSetUp
         ):
             self.output_dir = FileSystemSetUp.file_system_setup_factory(
-                self.output_dir, path_type="dir"
+                self.output_dir, path_type="dir", ssl_file=self.ssl_file
             )
         if not isinstance(self.log_dir, FileSystemSetUp):
             self.log_dir = FileSystemSetUp.file_system_setup_factory(
-                self.log_dir, path_type="dir"
+                self.log_dir, path_type="dir", ssl_file=self.ssl_file
             )
         if not isinstance(self.data_dir, FileSystemSetUp):
             self.data_dir = FileSystemSetUp.file_system_setup_factory(
-                self.data_dir, path_type="dir"
+                self.data_dir, path_type="dir", ssl_file=self.ssl_file
             )
 
     def __str__(self) -> str:
@@ -288,7 +288,7 @@ class PipelineConfig:
             return cls.from_mapping(dict(value))
 
         if isinstance(value, (str, Path)):
-            uri = FileSystemSetUp.from_any(value)
+            uri = FileSystemSetUp.from_any(value, ssl_file=cls.ssl_file)
             return cls.from_file(uri)
 
         raise TypeError("Unsupported pipeline config type: {0!r}".format(type(value)))
@@ -319,24 +319,25 @@ class PipelineConfig:
         name = payload.pop("name", None)
 
         backend = payload.pop("backend", "python")
+        ssl_file = payload.pop("ssl_file", None)
         stages_to_run = PipelineConfig._extract_stages_run(payload)
         work_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("work_dir", str(Path.cwd())), path_type="dir"
+            payload.pop("work_dir", str(Path.cwd())), path_type="dir", ssl_file=ssl_file
         )
         project_root = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("project_root", None), path_type="dir"
+            payload.pop("project_root", None), path_type="dir", ssl_file=ssl_file
         )
         output_dir_value = payload.pop("output_dir", None)
         log_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("log_dir", "logs"), path_type="dir"
+            payload.pop("log_dir", "logs"), path_type="dir", ssl_file=ssl_file
         )
         data_dir = FileSystemSetUp.file_system_setup_factory(
-            payload.pop("data_dir", "data"), path_type="dir"
+            payload.pop("data_dir", "data"), path_type="dir", ssl_file=ssl_file
         )
 
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
         overwrite = PipelineConfig._to_bool(payload.pop("overwrite", False))
-        ssl_file = payload.pop("ssl_file", None)
+
         if isinstance(raw_subprocess_fallback, str):
             warnings.warn(
                 "allow_subprocess_fallback should be a boolean, not a string. "
@@ -400,7 +401,9 @@ class PipelineConfig:
         """
         file_system = FileSystemFactory.create(path)
         config_path = file_system.expand_user()
-        file_system = FileSystemFactory.create(FileSystemSetUp.from_any(config_path))
+        file_system = FileSystemFactory.create(
+            FileSystemSetUp.from_any(config_path, ssl_file=cls.ssl_file)
+        )
         if not file_system.exists(type="data"):
             raise FileNotFoundError(
                 "Config file does not exist: {0}".format(config_path)
