@@ -1,5 +1,6 @@
 from pathlib import Path
 from textwrap import dedent
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -718,6 +719,44 @@ class TestStageFromFile(TestStageFactories):
             expected, path_type="file"
         )
 
+    def test_from_file_preserves_all_options(self, temp_script) -> None:
+        """
+        Tests that all options passed to from_file are preserved in the created
+        Stage instance.
+
+        Parameters
+        ----------
+        ``temp_script`` : callable
+            A fixture factory that creates temporary Python scripts.
+        """
+        script = temp_script(
+            dedent(
+                """
+                def main():
+                    variable = "Hello world"
+                    return variable
+                """
+            ).strip()
+            + "\n",
+            "test_stage.py",
+        )
+
+        stage = Stage.from_file(
+            script,
+            name="custom_name",
+            dependencies=["dep1", "dep2"],
+            metadata={"info": "example"},
+            entrypoint="main",
+            backend="python",
+        )
+
+        assert stage.name == "custom_name"
+        assert stage.source == script.resolve()
+        assert stage.dependencies == ("dep1", "dep2")
+        assert stage.metadata == {"info": "example"}
+        assert stage.entrypoint == "main"
+        assert stage.backend == "python"
+
 
 class TestStageFromCallable(TestStageFactories):
     """
@@ -760,6 +799,30 @@ class TestStageFromCallable(TestStageFactories):
         """
         test = Stage.from_callable(example_function, name="explicit_name")
         assert test.name == "explicit_name"
+
+    def test_from_callable_preserves_all_options(self, example_function) -> None:
+        """
+        Tests that all options passed to from_callable are preserved in the created
+        Stage instance.
+
+        Parameters
+        ----------
+        ``example_function`` : callable
+            A callable function to pass as a source for a ``Stage`` class instance.
+        """
+        stage = Stage.from_callable(
+            example_function,
+            name="custom_name",
+            dependencies=["dep1", "dep2"],
+            metadata={"info": "example"},
+            backend="python",
+        )
+
+        assert stage.name == "custom_name"
+        assert stage.source == example_function
+        assert stage.dependencies == ("dep1", "dep2")
+        assert stage.metadata == {"info": "example"}
+        assert stage.backend == "python"
 
 
 class TestStageFromDict(TestStageFactories):
@@ -870,3 +933,92 @@ class TestStageFromDict(TestStageFactories):
         original = dict(data)
         Stage.from_dict(data)
         assert original == data
+
+    def test_from_dict_file_source_preserves_entrypoint(self, temp_script) -> None:
+        """
+        Tests that the entrypoint is preserved when creating a Stage instance from a
+        dictionary with a file source.
+
+        Parameters
+        ----------
+        ``temp_script`` : callable
+            A fixture factory that creates temporary Python scripts.
+        """
+        script = temp_script(
+            "def main():\n    return 42\n",
+            "dict_stage.py",
+        )
+
+        data = {
+            "name": "dict_file_stage",
+            "source": script,
+            "dependencies": [" dep1 ", "dep2"],
+            "metadata": {"info": "example"},
+            "entrypoint": "main",
+            "backend": "python",
+        }
+
+        stage = Stage.from_dict(data)
+
+        assert stage.name == "dict_file_stage"
+        assert stage.source == script.resolve()
+        assert stage.dependencies == ("dep1", "dep2")
+        assert stage.metadata == {"info": "example"}
+        assert stage.entrypoint == "main"
+        assert stage.backend == "python"
+
+    def test_from_dict_callable_source_wins_over_callable_key(
+        self, example_function
+    ) -> None:
+        """
+        Tests that when both a callable source and a callable key are provided in the
+        dictionary, the callable source takes precedence.
+
+        Parameters
+        ----------
+        ``example_function`` : callable
+            A callable function to pass as a source for a ``Stage`` class instance.
+        """
+        data = {
+            "name": "dict_stage",
+            "source": example_function,
+            "callable": lambda: None,
+            "dependencies": [" dep1 ", "dep2"],
+            "metadata": "raw-metadata",
+            "backend": "java",
+            "entrypoint": "main",
+            "extra_key": "ignored",
+        }
+
+        stage = Stage.from_dict(data)
+
+        assert stage.name == "dict_stage"
+        assert stage.source == example_function
+        assert stage.dependencies == ("dep1", "dep2")
+        assert stage.metadata == {"metadata": "raw-metadata"}
+        assert stage.backend == "java"
+        assert stage.entrypoint is None
+
+
+class TestStageRun:
+    def test_run_calls_validate_and_executor(self, stage_test):
+        """
+        Tests that the run method calls validate and the executor with the correct
+        parameters.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object created with a callable source for testing.
+        """
+        context = object()
+        mock_executor = Mock()
+        mock_executor.execute.return_value = "run_result"
+        stage_test.executor = mock_executor
+
+        with patch.object(stage_test, "validate") as mock_validate:
+            result = stage_test.run(context, mock_executor)
+
+        mock_validate.assert_called_once_with()
+        mock_executor.execute.assert_called_once_with(stage_test, context)
+        assert result == "run_result"
