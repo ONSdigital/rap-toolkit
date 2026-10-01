@@ -1,19 +1,27 @@
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from onsrap.errors import PipelineConfigurationError
-from onsrap.execution import ExecutionContext, PythonStageExecutor
+from onsrap.errors import (
+    PipelineConfigurationError,
+    StageExecutionError,
+    StageLoadError,
+)
+from onsrap.execution import (
+    ExecutionContext,
+    PythonStageExecutor,
+    _build_success_result,
+    _invoke_callable,
+)
 from onsrap.logger import Logger
 from onsrap.models import (
-    GlobalConfig,
     PipelineConfig,
     StageConfig,
     StageResult,
     StageStatus,
 )
-from onsrap.warnings import StageConfigurationWarning
+from onsrap.stage import Stage
 
 
 @pytest.fixture
@@ -508,7 +516,106 @@ class TestResolveGivenPath:
         ) == Path("clean.py")
 
 
-"""TEST NOT RUN FOR StageExecutor AS COVERED UNDER PythonStageExecutor"""
+@pytest.fixture
+def example_function():
+    """
+    Test function to pass as a callable stage for execution testing.
+    """
+    return example_function
+
+
+@pytest.fixture
+def stage_test(example_function) -> Stage:
+    """
+    Stage object with a callable source for testing dispatch and execution.
+
+    Parameters
+    ----------
+    ``example_function`` : callable
+        A callable function to use as the stage source.
+
+    Returns
+    -------
+    ``Stage``
+        A Stage instance with a callable source.
+    """
+    return Stage(
+        name="callable_stage",
+        source=example_function,
+        dependencies=[],
+        metadata={"info": "example"},
+    )
+
+
+@pytest.fixture
+def stage_with_file_source(tmp_path) -> Stage:
+    """
+    Stage object with a file Path source for testing file-based dispatch.
+
+    Parameters
+    ----------
+    ``tmp_path`` : Path
+        A temporary path provided by pytest for testing file creation.
+
+    Returns
+    -------
+    ``Stage``
+        A Stage instance with a Path source.
+    """
+    script = tmp_path / "test_stage.py"
+    script.write_text("def main():\n    return 'output'\n", encoding="utf-8")
+
+    return Stage(
+        name="file_stage",
+        source=script,
+        dependencies=[],
+        metadata={},
+    )
+
+
+@pytest.fixture
+def stage_factory(tmp_path):
+    """
+    Fixture factory for creating Stage instances with different source types.
+
+    Usage:
+        stage = stage_factory(source=lambda: None, name="custom_stage")
+        stage = stage_factory(source_path="script.py", name="file_stage")
+
+    Parameters
+    ----------
+    ``tmp_path`` : Path
+        A temporary path provided by pytest.
+
+    Returns
+    -------
+    ``callable``
+        A factory function that creates Stage instances.
+    """
+
+    def _create_stage(
+        source=None,
+        source_path=None,
+        name="test_stage",
+        dependencies=None,
+        metadata=None,
+        entrypoint=None,
+    ):
+        if source_path is not None:
+            path = tmp_path / source_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("def main():\n    pass\n", encoding="utf-8")
+            source = path
+
+        return Stage(
+            name=name,
+            source=source,
+            dependencies=dependencies or [],
+            metadata=metadata or {},
+            entrypoint=entrypoint,
+        )
+
+    return _create_stage
 
 
 @pytest.fixture
@@ -529,96 +636,735 @@ class TestPythonStageExecutor:
         """
         assert pythonstageexecutor.preferred_entrypoints == ("main.py", "run.py")
 
-
-class TestCombineVars:
-    def test_combine_vars(self, execution) -> None:
+    def test_execute_dispatches_callable_sources(
+        self, pythonstageexecutor, stage_test, execution
+    ) -> None:
         """
-        Test that checks that a dictionary is returned, combining values from a global
-        configuration and a stage configuration whilst removing any stage specific
-        exclusions.
+        Tests that execute() dispatches callable sources to _execute_callable.
 
         Parameters
         ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``stage_test`` : Stage
+            A ``Stage`` object with a callable source.
         ``execution`` : ExecutionContext
             An ``ExecutionContext`` object for testing.
         """
-        global_vars = {"global_var1": "value1", "global_var2": "value2"}
-        exclusions = {"stage_1": ["global_var2"]}
-        stage_vars = {"stage_var1": "value3", "stage_var2": "value4"}
-        execution.global_config = GlobalConfig(
-            _variables=global_vars, exclusion=exclusions
-        )
-        execution.stage_configs = {
-            "stage_1": StageConfig(name="stage_1", _variables=stage_vars),
-        }
-        execution.active_stage_name = "stage_1"
-        combined_vars = execution._combine_vars()
-        assert combined_vars == {
-            "stage_var1": "value3",
-            "stage_var2": "value4",
-            "global_var1": "value1",
-        }
+        mock_result = Mock()
 
-    def test_combine_vars_errors(self, execution) -> None:
+        with patch.object(
+            pythonstageexecutor, "_execute_callable", return_value=mock_result
+        ) as mock_callable:
+            result = pythonstageexecutor.execute(stage_test, execution)
+
+        mock_callable.assert_called_once_with(
+            stage_test, execution, stage_test.source, stage_test.source_label
+        )
+        assert result == mock_result
+
+    def test_execute_dispatches_path_sources(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
         """
-        Test that confirms that a warning is raised if there is a variable defined in
-        both the global and the stage configurations as well as asserting the correct
-        values.
+        Tests that execute() dispatches Path sources to _execute_file.
 
         Parameters
         ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "test_script.py"
+        script.write_text("def main(): pass\n")
+
+        stage = Stage(
+            name="file_stage",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        mock_result = Mock()
+
+        with patch.object(
+            pythonstageexecutor, "_execute_file", return_value=mock_result
+        ) as mock_file:
+            result = pythonstageexecutor.execute(stage, execution)
+
+        mock_file.assert_called_once_with(stage, execution)
+        assert result == mock_result
+
+    def test_execute_raises_for_unsupported_source(
+        self, pythonstageexecutor, execution
+    ) -> None:
+        """
+        Tests that execute() raises StageExecutionError for invalid sources.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        stage = Stage(
+            name="invalid_stage",
+            source=None,
+            dependencies=[],
+            metadata={},
+        )
+
+        with pytest.raises(StageExecutionError) as exc_info:
+            pythonstageexecutor.execute(stage, execution)
+
+        assert exc_info.value.stage_name == "invalid_stage"
+        assert "does not have an executable source" in str(exc_info.value)
+
+    def test_execute_raises_for_integer_source(
+        self, pythonstageexecutor, execution
+    ) -> None:
+        """
+        Tests that execute() raises StageExecutionError when source is an invalid type.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
         ``execution`` : ExecutionContext
             An ``ExecutionContext`` object for testing.
 
         Raises
         ------
-        ``StageConfigurationWarning``
-            If a variable is defined in both the global and stage configurations, a
-            warning is raised to indicate that the stage variable will take precedence.
+        ``StageExecutionError``
+            When the stage source is not a callable or Path.
         """
-        global_vars = {"global_var1": "value1", "global_var2": "value2"}
-        exclusions = {"stage_1": ["global_var2"]}
-        stage_vars = {"stage_var1": "value3", "global_var1": "value4"}
-        execution.global_config = GlobalConfig(
-            _variables=global_vars, exclusion=exclusions
+        stage = Stage(
+            name="bad_stage",
+            source=lambda: None,
+            dependencies=[],
+            metadata={},
         )
-        execution.stage_configs = {
-            "stage_1": StageConfig(name="stage_1", _variables=stage_vars),
-        }
-        execution.active_stage_name = "stage_1"
+        stage.source = 42
 
-        with pytest.warns(
-            StageConfigurationWarning,
-            match="Stage defines variable\\(s\\) that are also defined in global "
-            "variables: global_var1\\. Stage variables will take precedence.",
-        ):
-            combined_vars = execution._combine_vars()
-            assert combined_vars == {"stage_var1": "value3", "global_var1": "value4"}
+        with pytest.raises(StageExecutionError):
+            pythonstageexecutor.execute(stage, execution)
 
-    def test_combine_vars_no_exclusion(self, execution) -> None:
+
+class TestExecuteCallable:
+    def test_execute_callable_success(
+        self, pythonstageexecutor, stage_test, execution
+    ) -> None:
         """
-        Test confirming that a dictionary is returned, combining values from a global
-        configuration and a stage configuration when there are no exclusions defined.
+        Tests that _execute_callable successfully runs a callable stage and returns
+        a successful StageResult.
 
         Parameters
         ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``stage_test`` : Stage
+            A ``Stage`` object with a callable source.
         ``execution`` : ExecutionContext
             An ``ExecutionContext`` object for testing.
         """
-        global_vars = {"global_var1": "value1", "global_var2": "value2"}
-        exclusions = {}
-        stage_vars = {"stage_var1": "value3", "stage_var2": "value4"}
-        execution.global_config = GlobalConfig(
-            _variables=global_vars, exclusion=exclusions
+
+        def test_callable(context, stage):
+            return "test_output"
+
+        stage_test.source = test_callable
+
+        with patch.object(execution.logger, "event"):
+            result = pythonstageexecutor._execute_callable(
+                stage_test, execution, test_callable, "test_callable_label"
+            )
+
+        assert result.status == StageStatus.SUCCEEDED
+        assert result.outputs == "test_output"
+        assert result.name == stage_test.name
+        assert result.source == "test_callable_label"
+
+    def test_execute_callable_failure(
+        self, pythonstageexecutor, stage_test, execution
+    ) -> None:
+        """
+        Tests that _execute_callable catches exceptions from the callable and returns
+        a failed StageResult with the error message.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``stage_test`` : Stage
+            A ``Stage`` object with a callable source.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+
+        Raises
+        ------
+        ``StageExecutionError``
+            When the callable raises an exception.
+        """
+
+        def failing_callable(context, stage):
+            raise ValueError("Test error message")
+
+        stage_test.source = failing_callable
+
+        with (
+            patch.object(execution.logger, "event"),
+            pytest.raises(StageExecutionError) as exc_info,
+        ):
+            pythonstageexecutor._execute_callable(
+                stage_test, execution, failing_callable, "failing_callable"
+            )
+
+        assert exc_info.value.stage_name == stage_test.name
+        assert "Callable stage failed" in str(exc_info.value)
+        assert exc_info.value.result.status == StageStatus.FAILED
+        assert "Test error message" in exc_info.value.result.error
+
+
+class TestExecuteFile:
+    def test_execute_file_with_entrypoint(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_file with a resolvable entrypoint calls _execute_callable
+        and returns its result.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "stage_script.py"
+        script.write_text("def main(context, stage):\n    return 'file_output'\n")
+
+        stage = Stage(
+            name="file_stage_with_entry",
+            source=script,
+            dependencies=[],
+            metadata={},
+            entrypoint="main",
         )
-        execution.stage_configs = {
-            "stage_1": StageConfig(name="stage_1", _variables=stage_vars),
-        }
-        execution.active_stage_name = "stage_1"
-        combined_vars = execution._combine_vars()
-        assert combined_vars == {
-            "stage_var1": "value3",
-            "stage_var2": "value4",
-            "global_var1": "value1",
-            "global_var2": "value2",
-        }
+
+        mock_result = Mock(spec=StageResult)
+
+        with patch.object(
+            pythonstageexecutor, "_execute_callable", return_value=mock_result
+        ) as mock_callable:
+            result = pythonstageexecutor._execute_file(stage, execution)
+
+        assert result == mock_result
+        mock_callable.assert_called_once()
+
+    def test_execute_file_entrypoint_load_failure(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_file raises StageLoadError when the entrypoint cannot
+        be loaded.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+
+        Raises
+        ------
+        ``StageLoadError``
+            When the Python entrypoint could not be loaded.
+        """
+        script = tmp_path / "bad_stage.py"
+        script.write_text("this is not valid python code {{{")
+
+        stage = Stage(
+            name="bad_file_stage",
+            source=script,
+            dependencies=[],
+            metadata={},
+            entrypoint="main",
+        )
+
+        with pytest.raises(StageLoadError) as exc_info:
+            pythonstageexecutor._execute_file(stage, execution)
+
+        assert exc_info.value.stage_name == stage.name
+        assert "could not be loaded" in str(exc_info.value)
+
+    def test_execute_file_no_entrypoint_fallback_disabled(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_file raises StageExecutionError when no entrypoint is
+        found and subprocess fallback is disabled.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+
+        Raises
+        ------
+        ``StageExecutionError``
+            When no callable entrypoint is found and fallback is disabled.
+        """
+        script = tmp_path / "no_main.py"
+        script.write_text("x = 1")
+
+        stage = Stage(
+            name="no_entry_stage",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        execution.config.allow_subprocess_fallback = False
+
+        with pytest.raises(StageExecutionError) as exc_info:
+            pythonstageexecutor._execute_file(stage, execution)
+
+        assert exc_info.value.stage_name == stage.name
+        assert "subprocess fallback is disabled" in str(exc_info.value)
+
+    def test_execute_file_no_entrypoint_fallback_enabled(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_file falls back to _execute_subprocess when no
+        entrypoint is found and fallback is enabled.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "no_main.py"
+        script.write_text("x = 1")
+
+        stage = Stage(
+            name="fallback_stage",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        execution.config.allow_subprocess_fallback = True
+        mock_result = Mock(spec=StageResult)
+
+        with patch.object(
+            pythonstageexecutor, "_execute_subprocess", return_value=mock_result
+        ) as mock_subprocess:
+            result = pythonstageexecutor._execute_file(stage, execution)
+
+        assert result == mock_result
+        mock_subprocess.assert_called_once_with(stage, execution)
+
+
+class TestExecuteSubprocess:
+    def test_execute_subprocess_success(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_subprocess successfully runs a Python file and captures
+        stdout, stderr, and return code.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "success_script.py"
+        script.write_text("print('Process output')\nprint('Line 2')")
+
+        stage = Stage(
+            name="subprocess_success",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        # Update execution to use tmp_path for working directory
+        execution.working_directory = tmp_path
+
+        with patch.object(execution.logger, "event"):
+            result = pythonstageexecutor._execute_subprocess(stage, execution)
+
+        assert result.status == StageStatus.SUCCEEDED
+        assert "Process output" in result.outputs
+        assert result.return_code == 0
+        assert result.name == stage.name
+
+    def test_execute_subprocess_failure(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_subprocess captures failure information when a script
+        returns non-zero exit code.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+
+        Raises
+        ------
+        ``StageExecutionError``
+            When subprocess returns a non-zero exit code.
+        """
+        script = tmp_path / "failing_script.py"
+        script.write_text("import sys\nprint('Error message')\nsys.exit(1)")
+
+        stage = Stage(
+            name="subprocess_failure",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        # Update execution to use tmp_path for working directory
+        execution.working_directory = tmp_path
+
+        with (
+            patch.object(execution.logger, "event"),
+            pytest.raises(StageExecutionError) as exc_info,
+        ):
+            pythonstageexecutor._execute_subprocess(stage, execution)
+
+        assert exc_info.value.stage_name == stage.name
+        assert exc_info.value.result.status == StageStatus.FAILED
+        assert exc_info.value.result.return_code == 1
+
+
+class TestInvokeCallable:
+    def test_invoke_callable_with_context_keyword(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable correctly passes context via keyword argument
+        when the callable has a 'context' parameter.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_with_context(context):
+            return context.pipeline_name
+
+        result = _invoke_callable(callable_with_context, stage_test, execution)
+
+        assert result == "test_pipeline"
+
+    def test_invoke_callable_with_ctx_keyword(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable correctly passes context via 'ctx' keyword argument.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_with_ctx(ctx):
+            return ctx.run_id
+
+        result = _invoke_callable(callable_with_ctx, stage_test, execution)
+
+        assert result == "run_id_1234"
+
+    def test_invoke_callable_with_stage_keyword(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable correctly passes stage via keyword argument.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_with_stage(stage):
+            return stage.name
+
+        result = _invoke_callable(callable_with_stage, stage_test, execution)
+
+        assert result == "callable_stage"
+
+    def test_invoke_callable_with_both_keywords(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable correctly passes both context and stage via
+        keyword arguments.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_with_both(context, stage):
+            return f"{context.pipeline_name}:{stage.name}"
+
+        result = _invoke_callable(callable_with_both, stage_test, execution)
+
+        assert result == "test_pipeline:callable_stage"
+
+    def test_invoke_callable_no_args(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable calls a no-argument callable without error.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_no_args():
+            return "no_args_result"
+
+        result = _invoke_callable(callable_no_args, stage_test, execution)
+
+        assert result == "no_args_result"
+
+    def test_invoke_callable_positional_stage_only(self, stage_test, execution) -> None:
+        """
+        Tests that _invoke_callable passes stage as the only positional parameter.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_stage_only(task):
+            return task.name
+
+        result = _invoke_callable(callable_stage_only, stage_test, execution)
+
+        assert result == "callable_stage"
+
+    def test_invoke_callable_positional_context_only(
+        self, stage_test, execution
+    ) -> None:
+        """
+        Tests that _invoke_callable passes context as the only positional parameter.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_ctx_only(ctx):
+            return ctx.run_id
+
+        result = _invoke_callable(callable_ctx_only, stage_test, execution)
+
+        assert result == "run_id_1234"
+
+    def test_invoke_callable_positional_both_stage_first(
+        self, stage_test, execution
+    ) -> None:
+        """
+        Tests that _invoke_callable correctly orders stage then context for positional
+        parameters when both are present.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_stage_context(task, ctx):
+            return f"{task.name}:{ctx.run_id}"
+
+        result = _invoke_callable(callable_stage_context, stage_test, execution)
+
+        assert result == "callable_stage:run_id_1234"
+
+    def test_invoke_callable_positional_both_context_first(
+        self, stage_test, execution
+    ) -> None:
+        """
+        Tests that _invoke_callable correctly orders context then stage for positional
+        parameters when context comes first.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+
+        def callable_context_stage(context, stage):
+            return f"{context.pipeline_name}:{stage.name}"
+
+        result = _invoke_callable(callable_context_stage, stage_test, execution)
+
+        assert result == "test_pipeline:callable_stage"
+
+
+class TestBuildSuccessResult:
+    def test_build_success_result_non_stageresult_output(self, stage_test) -> None:
+        """
+        Tests that _build_success_result creates a new StageResult when output is
+        not already a StageResult.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        """
+        from datetime import datetime
+
+        started = datetime(2024, 5, 6, 15, 45, 30)
+        finished = datetime(2024, 5, 6, 16, 45, 30)
+        output = {"data": "test_output"}
+
+        result = _build_success_result(
+            stage_test, started, finished, output, source="test_source"
+        )
+
+        assert result.name == stage_test.name
+        assert result.status == StageStatus.SUCCEEDED
+        assert result.outputs == output
+        assert result.started_at == started
+        assert result.finished_at == finished
+        assert result.source == "test_source"
+        assert result.metadata == stage_test.metadata
+
+    def test_build_success_result_stageresult_output_normalizes_name(
+        self, stage_test
+    ) -> None:
+        """
+        Tests that _build_success_result updates the name if the output StageResult
+        has a different name than the stage.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        """
+        from datetime import datetime
+
+        started = datetime(2024, 5, 6, 15, 45, 30)
+        finished = datetime(2024, 5, 6, 16, 45, 30)
+
+        output_result = StageResult(
+            name="wrong_name",
+            status=StageStatus.PENDING,
+            started_at=started,
+            finished_at=finished,
+            outputs="test",
+            metadata={},
+        )
+
+        result = _build_success_result(
+            stage_test, started, finished, output_result, source="test_source"
+        )
+
+        assert result.name == stage_test.name
+
+    def test_build_success_result_stageresult_updates_source(self, stage_test) -> None:
+        """
+        Tests that _build_success_result adds source to a StageResult that has none.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        """
+        from datetime import datetime
+
+        started = datetime(2024, 5, 6, 15, 45, 30)
+        finished = datetime(2024, 5, 6, 16, 45, 30)
+
+        output_result = StageResult(
+            name=stage_test.name,
+            status=StageStatus.PENDING,
+            started_at=started,
+            finished_at=finished,
+            outputs="test",
+            metadata={},
+            source=None,
+        )
+
+        result = _build_success_result(
+            stage_test, started, finished, output_result, source="new_source"
+        )
+
+        assert result.source == "new_source"
+
+    def test_build_success_result_stageresult_pending_to_succeeded(
+        self, stage_test
+    ) -> None:
+        """
+        Tests that _build_success_result converts PENDING status to SUCCEEDED.
+
+        Parameters
+        ----------
+        ``stage_test`` : Stage
+            A ``Stage`` object for testing.
+        """
+        from datetime import datetime
+
+        started = datetime(2024, 5, 6, 15, 45, 30)
+        finished = datetime(2024, 5, 6, 16, 45, 30)
+
+        output_result = StageResult(
+            name=stage_test.name,
+            status=StageStatus.PENDING,
+            started_at=started,
+            finished_at=finished,
+            outputs="test",
+            metadata={},
+        )
+
+        result = _build_success_result(
+            stage_test, started, finished, output_result, source="test_source"
+        )
+
+        assert result.status == StageStatus.SUCCEEDED
