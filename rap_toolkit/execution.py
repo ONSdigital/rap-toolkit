@@ -274,6 +274,37 @@ class ExecutionContext:
             "Please parse a run directory to the ExecutionContext."
         )
 
+    def extract_bucket_and_key(self, path: str) -> tuple[str, str]:
+        """
+        Extracts the bucket and key from a given S3 path.
+
+        Parameters
+        ----------
+        ``path`` : str
+            The S3 path to extract the bucket and key from.
+
+        Returns
+        -------
+        tuple[str, str]
+            A tuple containing the bucket and key extracted from the S3 path.
+
+        Raises
+        ------
+        ``ValueError``
+            If the provided path is not a valid S3 path.
+        """
+        if not (path.startswith("s3://") or path.startswith("s3a://")):
+            raise ValueError(
+                f"Invalid S3 path: {path}. Must start with 's3://' or 's3a://'."
+            )
+        if path.startswith("s3://"):
+            parts = path[5:].split("/", 1)
+        else:  # s3a://
+            parts = path[6:].split("/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid S3 path: {path}. Must contain a bucket and key.")
+        return parts[0], parts[1]
+
     def get_stage_config(
         self, stage: str | None = None, with_global: bool = True, vars_only: bool = True
     ) -> dict[str, Any] | StageConfig | None:
@@ -319,7 +350,6 @@ class ExecutionContext:
             return stage_config.variables
         return stage_config
 
-    # TODO: This needs to shift based on file system
     def resolve_given_path(
         self,
         stage_name: str | None,
