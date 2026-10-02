@@ -693,3 +693,63 @@ class TestCombineVars:
             "global_var1": "value1",
             "global_var2": "value2",
         }
+
+
+class TestS3PathSplits:
+    def test_extract_bucket_and_key(self, execution) -> None:
+        """
+        Test that confirms that the S3 bucket and key are correctly extracted from a
+        given S3 URI.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        s3_uri = "s3://my-bucket/path/to/my/file.txt"
+        bucket, key = execution.extract_bucket_and_key(s3_uri)
+        assert bucket == "my-bucket"
+        assert key == "path/to/my/file.txt"
+
+    def test_extract_bucket_and_key_s3a(self, execution) -> None:
+        """
+        Test that confirms that the S3 bucket and key are correctly extracted from a
+        given S3 URI with the s3a:// scheme.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        s3_uri = "s3a://my-bucket/path/to/my/file.txt"
+        bucket, key = execution.extract_bucket_and_key(s3_uri)
+        assert bucket == "my-bucket"
+        assert key == "path/to/my/file.txt"
+
+    def test_extract_bucket_and_key_invalid_uri(self, execution) -> None:
+        """
+        Test that confirms that a ValueError is raised when an invalid S3 URI is
+        provided.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        invalid_s3_uri = "invalid://my-bucket/path/to/my/file.txt"
+        with pytest.raises(ValueError):
+            execution.extract_bucket_and_key(invalid_s3_uri)
+
+    def test_extract_bucket_and_key_missing_bucket(self, execution) -> None:
+        """
+        Test that confirms that a ValueError is raised when an S3 URI is provided
+        without a bucket name.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        missing_bucket_uri = "s3://"
+        with pytest.raises(ValueError):
+            execution.extract_bucket_and_key(missing_bucket_uri)
