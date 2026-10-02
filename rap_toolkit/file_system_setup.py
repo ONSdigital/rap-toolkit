@@ -992,7 +992,7 @@ class S3FileSystem:
                 raise ValueError(
                     "Ranger RAZ client is not installed. Please install it to use SSL file configuration."
                 )
-            configure_ranger_raz(s3, self.setup.ssl_file)
+            configure_ranger_raz(s3, ssl_file=self.setup.ssl_file)
 
         return s3
 
