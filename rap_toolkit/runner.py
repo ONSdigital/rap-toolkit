@@ -325,6 +325,7 @@ def _log_config(
         root=run_dir.root,
         workspace_path=run_dir.workspace_path,
         file_name=run_dir.file_name,
+        ssl_file=run_dir.ssl_file,
     )
     config_file.file_name = (
         f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"

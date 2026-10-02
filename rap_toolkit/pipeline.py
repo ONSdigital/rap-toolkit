@@ -1674,6 +1674,7 @@ class Pipeline:
             backend=backend,
             logger=logger,
             executor=executor,
+            ssl_file=ssl_file,
         )
 
     @staticmethod

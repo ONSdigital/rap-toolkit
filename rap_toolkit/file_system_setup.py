@@ -223,7 +223,7 @@ class FileSystemSetUp:
                 root=input.root,
                 workspace_path=input.workspace_path,
                 file_name=input.file_name,
-                ssl_file=input.ssl_file,
+                ssl_file=ssl_file,
             )
             return new_fs_setup
         elif isinstance(input, (str, Path)):
@@ -1293,7 +1293,9 @@ class S3FileSystem:
         type: str,  # dir or data
     ) -> str | Path:
         if type == "dir":
-            if self.dir_path and self.dir_path.startswith(f"s3://{self.setup.root}/"):
+            if self.dir_path and self.dir_path.startswith(
+                f"{self.setup.prefix}{self.setup.root}/"
+            ):
                 return self.dir_path
             else:
                 raise ValueError(
@@ -1301,7 +1303,9 @@ class S3FileSystem:
                 )
 
         elif type == "data":
-            if self.data_path and self.data_path.startswith(f"s3://{self.setup.root}/"):
+            if self.data_path and self.data_path.startswith(
+                f"{self.setup.prefix}{self.setup.root}/"
+            ):
                 return self.data_path
             else:
                 raise ValueError("Data path is not set or not an absolute S3 path.")
