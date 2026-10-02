@@ -873,7 +873,9 @@ class TestS3FileSystemRazClientValidation:
             s3_client = s3_fs._get_s3_client()
 
             # Verify raz_client WAS called with correct arguments
-            mock_raz_client.assert_called_once_with(s3_client, "/path/to/cert.pem")
+            mock_raz_client.assert_called_once_with(
+                s3_client, ssl_file="/path/to/cert.pem"
+            )
             assert s3_client is not None
 
     def test_s3_client_ssl_file_without_raz_client_library(self, aws_credentials):

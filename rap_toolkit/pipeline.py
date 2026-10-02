@@ -90,7 +90,10 @@ class Pipeline:
             resolved_global_config,
         ) = self._resolve_config(config, ssl_file=ssl_file)
 
-        self.name = name or resolved_config.name or "pipeline"
+        normalized_name = self._normalize_name(name)
+        self.name = (
+            normalized_name or self._normalize_name(resolved_config.name) or "pipeline"
+        )
         self.backend = backend or resolved_config.backend or "python"
         if backend == "python" and resolved_config.backend != "python":
             raise PipelineInitialisationError(
@@ -152,6 +155,13 @@ class Pipeline:
             stages=[stage.name for stage in self.stages],
             enabled_stages=[stage.name for stage in self.graph.stages],
         )
+
+    @staticmethod
+    def _normalize_name(name: str | None) -> str | None:
+        if name is None:
+            return None
+
+        return name.replace(" ", "_")
 
     def __str__(self) -> str:
         """

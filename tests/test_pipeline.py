@@ -64,7 +64,7 @@ class TestPipelineNamingAndInit:
 
         with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
             pipeline_named = Pipeline(
-                name="test_pipeline_name",
+                name="test pipeline name",
                 stages=[Stage("Stage_0", source=Path("Stage_0.py"), dependencies=())],
             )
             pipeline_config = Pipeline(
