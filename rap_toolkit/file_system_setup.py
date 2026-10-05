@@ -1138,7 +1138,9 @@ class S3FileSystem:
         """
         if type == "dir":
             if self.dir_path:
-                return self.dir_path.startswith(f"{self.setup.prefix}{self.setup.root}/")
+                return self.dir_path.startswith(
+                    f"{self.setup.prefix}{self.setup.root}/"
+                )
             else:
                 raise ValueError(
                     "Directory path is not set. Cannot check if it is absolute."
