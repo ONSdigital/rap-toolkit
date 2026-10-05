@@ -184,8 +184,8 @@ The following optional extension ensures that run outputs are stored in run spec
 ```python
 #context is the ExecutionContext which is held in your Pipeline instance and parsed through to individual stages
 def main(context=None):
-    data_root = context.get_data_dir() #returns the root file path for where your data is stored
-    output_root = context.resolve_output_root() # returns the root file path for where your outputs will be stored in your run specific directories
+    data_root = context.get_data_dir(path_type="path") #returns the root file path for where your data is stored
+    output_root = context.resolve_output_root(path_type="path") # returns the root file path for where your outputs will be stored in your run specific directories
 
     original_data_location = Path(data_root / "og_data.xlsx")
     final_data_location = Path(output_root/"cleaned_data_output.xlsx")
