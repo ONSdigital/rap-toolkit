@@ -10,7 +10,7 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path, PurePath, PurePosixPath
 from tempfile import SpooledTemporaryFile
 from typing import IO, Any, ContextManager, Generator, Optional, Protocol, Type, cast
-from urllib.parse import unquote, urlparse, urlsplit
+from urllib.parse import quote, unquote, urlparse, urlsplit
 
 import boto3
 import botocore
@@ -98,24 +98,30 @@ class FileSystemSetUp:
         if root != "/" and root.endswith("/"):
             root = root.rstrip("/")
 
+        encoded_root = quote(root, safe="/:") if root != "/" else root
+        encoded_workspace_path = (
+            quote(self.workspace_path.lstrip("/"), safe="/")
+            if self.workspace_path
+            else None
+        )
+        encoded_file_name = quote(self.file_name, safe="") if self.file_name else None
+
         if root == "/":
-            if self.workspace_path:
-                workspace_path = self.workspace_path.lstrip("/")
-                if self.file_name:
-                    return f"{self.prefix}{workspace_path}/{self.file_name}"
-                return f"{self.prefix}{workspace_path}"
-            if self.file_name:
-                return f"{self.prefix}{self.file_name}"
+            if encoded_workspace_path:
+                if encoded_file_name:
+                    return f"{self.prefix}{encoded_workspace_path}/{encoded_file_name}"
+                return f"{self.prefix}{encoded_workspace_path}"
+            if encoded_file_name:
+                return f"{self.prefix}{encoded_file_name}"
             return f"{self.prefix}"
         else:
-            if self.workspace_path:
-                workspace_path = self.workspace_path.lstrip("/")
-                if self.file_name:
-                    return f"{self.prefix}{root}/{workspace_path}/{self.file_name}"
-                return f"{self.prefix}{root}/{workspace_path}"
-            if self.file_name:
-                return f"{self.prefix}{root}/{self.file_name}"
-            return f"{self.prefix}{root}"
+            if encoded_workspace_path:
+                if encoded_file_name:
+                    return f"{self.prefix}{encoded_root}/{encoded_workspace_path}/{encoded_file_name}"
+                return f"{self.prefix}{encoded_root}/{encoded_workspace_path}"
+            if encoded_file_name:
+                return f"{self.prefix}{encoded_root}/{encoded_file_name}"
+            return f"{self.prefix}{encoded_root}"
 
     @classmethod
     def from_str(
