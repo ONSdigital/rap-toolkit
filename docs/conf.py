@@ -165,7 +165,7 @@ html_static_path = ["_static"]
 # html_search_scorer = "scorer.js"
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "onsrapdoc"
+htmlhelp_basename = "rap-toolkitdoc"
 
 # -- Options for autosection output ----------------
 

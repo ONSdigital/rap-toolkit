@@ -5,9 +5,10 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from onsrap.execution import ExecutionContext
-from onsrap.logger import Logger
-from onsrap.models import (
+from rap_toolkit.execution import ExecutionContext
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.logger import Logger
+from rap_toolkit.models import (
     PipelineConfig,
     PipelineRun,
     PipelineStatus,
@@ -16,7 +17,7 @@ from onsrap.models import (
     StageStatus,
     now,
 )
-from onsrap.runner import _log_config, _log_pipeline_attributes, print_config_diffs
+from rap_toolkit.runner import _log_config, _log_pipeline_attributes, print_config_diffs
 
 
 class TestLogConfig:
@@ -32,6 +33,8 @@ class TestLogConfig:
         """
         run_dir = tmp_path / "runs" / "synthetic_run"
         run_dir.mkdir(parents=True)
+
+        run_dir = FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir")
 
         config = PipelineConfig(
             name="synthetic_pipeline",
@@ -83,12 +86,18 @@ class TestLogConfig:
 
         _log_config(run_dir, context, manifest)
 
-        expected_file = run_dir / (
+        config_file = FileSystemSetUp.file_system_setup_factory(
+            run_dir, path_type="dir"
+        )
+        config_file.file_name = (
             "configuration_for_"
             f"{context.pipeline_name}_{context.started_at.date()}_"
             f"{context.run_id[-8:]}.yaml"
         )
 
+        expected_file = config_file.create_path()
+
+        assert expected_file is not None
         assert expected_file.exists()
 
         file_text = expected_file.read_text(encoding="utf-8")
@@ -277,7 +286,9 @@ class TestRunInfoWriteOut:
         )
 
         _log_pipeline_attributes(
-            pipeline_run=pipeline_run, run_dir=run_dir, context=context
+            pipeline_run=pipeline_run,
+            run_dir=FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir"),
+            context=context,
         )
 
         expected_file = run_dir / (
@@ -344,7 +355,9 @@ class TestRunInfoWriteOut:
         )
 
         _log_pipeline_attributes(
-            pipeline_run=pipeline_run, run_dir=run_dir, context=context
+            pipeline_run=pipeline_run,
+            run_dir=FileSystemSetUp.file_system_setup_factory(run_dir, path_type="dir"),
+            context=context,
         )
 
         expected_file = run_dir / (

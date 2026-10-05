@@ -5,7 +5,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from onsrap import ExecutionContext
+from rap_toolkit import ExecutionContext
 
 
 def load_orders(csv_path: Path) -> list[dict[str, str]]:
@@ -90,10 +90,14 @@ def build_summary(
 
 
 def main(context: ExecutionContext = None) -> dict[str, object]:
-    data_root = context.get_data_dir()
-    output_root = context.resolve_output_root()
+    data_root = context.get_data_dir(path_type="path")
+    output_root = context.resolve_output_root(path_type="path")
     raw_path = context.resolve_given_path(
-        "0_data_validation", "raw_path", "orders.csv", data_root
+        stage_name="0_data_validation",
+        path_name="raw_path",
+        file_name="orders.csv",
+        path_type="path",
+        root=data_root,
     )
     clean_path = output_root / "interim" / "1_clean_orders.csv"
 

@@ -1,13 +1,5 @@
 # `rap-toolkit`
 
-[![Lint](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml)
-[![Security](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-security.yml)
-[![Type Check](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-typecheck.yml)
-[![Tests](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-tests.yml)
-[![Build](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-build.yml)
-[![Coverage](https://codecov.io/gh/ONSdigital/onsrap/branch/main/graph/badge.svg)](https://codecov.io/gh/ONSdigital/onsrap)
-
-A simple Pipeline orchestration package.
 *A simple Pipeline orchestration package.*
 
 [![Lint](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/ONSdigital/onsrap/actions/workflows/ci-lint.yml)
@@ -90,16 +82,20 @@ For more information on the ONS RAP Minimum Standards, please see the full [stan
 
 **Parent file:** There should be a parent file that sets out configuration, required directories and file paths, and builds the `Pipeline` instance. It is recommended that this is named something similar to `main.py` so that it is easy for users to see where the `Pipeline` starts. This file will be what is run through the terminal to run the entire pipeline.
 
-## Requirements
-
-- **Python 3.10+ installed**
-
-Contributors have some additional requirements - please see our [contributing guidance][contributing].
+*NB: Configuration can be stored in a separate configuration file if preferred*
 
 ## Dependencies / System Requirements
 
+- **Python 3.10+ installed**
 - **Windows Operating System**
-- **Local File System** *(support for remote/cloud computing in development)*
+- **Local File System or S3 Cloud Storage**
+- an optional **ssl_file** certificate path when using Ranger RAZ (requires `raz_client`)
+
+*Package Dependencies*
+- **boto3** and **botocore** for S3 util
+- **PyYaml**
+
+Contributors have some additional requirements - please see our [contributing guidance][contributing].
 
 ## Installing the package
 
@@ -188,8 +184,8 @@ The following optional extension ensures that run outputs are stored in run spec
 ```python
 #context is the ExecutionContext which is held in your Pipeline instance and parsed through to individual stages
 def main(context=None):
-    data_root = context.get_data_dir() #returns the root file path for where your data is stored
-    output_root = context.resolve_output_root() # returns the root file path for where your outputs will be stored in your run specific directories
+    data_root = context.get_data_dir(path_type="path") #returns the root file path for where your data is stored
+    output_root = context.resolve_output_root(path_type="path") # returns the root file path for where your outputs will be stored in your run specific directories
 
     original_data_location = Path(data_root / "og_data.xlsx")
     final_data_location = Path(output_root/"cleaned_data_output.xlsx")
@@ -216,6 +212,10 @@ Once you have your `Pipeline` instance, you can run the `Pipeline.run()` method 
 All runs of the `Pipeline` will be stored in a `run_directory` that is unique. This will prevent any overwriting of previous runs' outputs. In order for this to work properly, data locations in the `main.py` file need to be calculated using specific functions within the package. An example of this can be seen in the Quick Start Code Example section.
 
 There is also utility to use a configuration file to store all information required to run the `Pipeline`. Information on how to set up the configuration file can be found in our [configuration guidance][configuration_guidance].
+
+### S3 Functionality
+
+Due to the underlying structural differences between local file systems and cloud based file systems, some of the above is different if you require integration with accessing data from S3 file systems. If you are requiring S3 integration, please see the [S3 User Guidance][s3_user_guidance] page.
 
 ### Example Pipeline
 
@@ -256,7 +256,7 @@ The `rap-toolkit` repository has the following structure:
 
 ```shell
 .
-├── onsrap/                     # Core package code
+├── rap_toolkit/                # Core package code
 │   ├── __init__.py
 │   ├── errors.py
 │   ├── execution.py
@@ -307,7 +307,7 @@ The `rap-toolkit` repository has the following structure:
 
 ## Contributing
 
-If you want to help us build and improve `onsrap`, please take a look at our [contributing guidelines][contributing].
+If you want to help us build and improve `rap-toolkit`, please take a look at our [contributing guidelines][contributing].
 
 ## Acknowledgements
 
@@ -319,3 +319,4 @@ This project structure is based on the [`govcookiecutter` template project][govc
 [docs-loading-environment-variables-secrets]: https://github.com/best-practice-and-impact/govcookiecutter/blob/main/%7B%7B%20cookiecutter.repo_name%20%7D%7D/docs/user_guide/loading_environment_variables.md#storing-secrets-and-credentials
 [standards]: https://best-practice-and-impact.github.io/ONS_minimum_RAP/
 [configuration_guidance]: docs\user_guide\configuration_guidance.md
+[s3_user_guidance]: docs\user_guide\s3_user_guide.md

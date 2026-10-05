@@ -11,6 +11,8 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import (
     HistoricalPipelineLoadError,
     PipelineConfigurationError,
@@ -79,15 +81,19 @@ class Pipeline:
         dependencies: Mapping[str, Sequence[str]] | None = None,
         logger: Logger | None = None,
         executor: StageExecutor | PythonStageExecutor | None = None,
+        ssl_file: str | None = None,
     ):
         (
             resolved_config,
             resolved_stage_configs,
             configured_stages,
             resolved_global_config,
-        ) = self._resolve_config(config)
+        ) = self._resolve_config(config, ssl_file=ssl_file)
 
-        self.name = name or resolved_config.name or "pipeline"
+        normalized_name = self._normalize_name(name)
+        self.name = (
+            normalized_name or self._normalize_name(resolved_config.name) or "pipeline"
+        )
         self.backend = backend or resolved_config.backend or "python"
         if backend == "python" and resolved_config.backend != "python":
             raise PipelineInitialisationError(
@@ -97,8 +103,14 @@ class Pipeline:
         self.config = resolved_config
         if self.config.name is None:
             self.config.name = self.name
+        if self.config.ssl_file is None:
+            self.config.ssl_file = ssl_file
 
-        self.logger = logger or Logger(log_dir=self.config.log_dir)
+        self.logger = logger or Logger(
+            log_dir=FileSystemSetUp.file_system_setup_factory(
+                self.config.log_dir, path_type="dir", ssl_file=self.config.ssl_file
+            )
+        )
 
         if stages is not None and configured_stages:
             raise PipelineInitialisationError(
@@ -143,6 +155,13 @@ class Pipeline:
             stages=[stage.name for stage in self.stages],
             enabled_stages=[stage.name for stage in self.graph.stages],
         )
+
+    @staticmethod
+    def _normalize_name(name: str | None) -> str | None:
+        if name is None:
+            return None
+
+        return name.replace(" ", "_")
 
     def __str__(self) -> str:
         """
@@ -320,7 +339,9 @@ class Pipeline:
         if isinstance(stage_config, Mapping):
             payload = dict(stage_config)
         elif isinstance(stage_config, (str, Path)):
-            payload = self._load_config_mapping(stage_config)
+            payload = self._load_config_mapping(
+                stage_config, ssl_file=self.config.ssl_file
+            )
         else:
             raise StageConfigurationError(
                 f"Unsupported stage configuration specification: {type(stage_config)!r}."
@@ -622,7 +643,16 @@ class Pipeline:
             return None
 
         try:
-            return load_historical_run(run_dir=Path(self.run_output) / latest_run_id)
+            latest_run = (
+                FileSystemSetUp.file_system_setup_factory(
+                    self.run_output, path_type="dir", ssl_file=self.config.ssl_file
+                ).create_uri()
+                + "/"
+                + str(latest_run_id)
+            )
+            return load_historical_run(
+                run_dir=latest_run, ssl_file=self.config.ssl_file
+            )
         except StageLoadError:
             warnings.warn(
                 "Historical run file does not exist. Last_run attribute will be None.",
@@ -672,7 +702,12 @@ class Pipeline:
                 continue
             try:
                 all_runs[run_id] = load_historical_run(
-                    run_dir=Path(self.run_output) / run_id
+                    run_dir=FileSystemSetUp.file_system_setup_factory(
+                        self.run_output, path_type="dir", ssl_file=self.config.ssl_file
+                    ).create_uri()
+                    + "/"
+                    + str(run_id),
+                    ssl_file=self.config.ssl_file,
                 )
             except StageLoadError:
                 warnings.warn(
@@ -681,7 +716,7 @@ class Pipeline:
                 )
         return all_runs if all_runs else None
 
-    def _set_run_output(self) -> Path:
+    def _set_run_output(self) -> FileSystemSetUp:
         """
         Private method that sets the run output directory for the Pipeline.
 
@@ -698,14 +733,27 @@ class Pipeline:
             the directory for the run outputs.
         """
         if self.config.output_dir is not None:
-            run_output = Path(self.config.output_dir)
+            run_output = FileSystemSetUp.file_system_setup_factory(
+                self.config.output_dir, path_type="dir", ssl_file=self.config.ssl_file
+            )
         else:
             warnings.warn(
                 "Output directory is not specified. Using project root or work directory as the run output.",
                 StageConfigurationWarning,
             )  # TODO: fill with warnings from Pipeline branch
-            run_output = Path(self.config.project_root or self.config.work_dir)
-        return run_output / "runs"
+            run_output = FileSystemSetUp.file_system_setup_factory(
+                self.config.project_root or self.config.work_dir,
+                path_type="dir",
+                ssl_file=self.config.ssl_file,
+            )
+
+        if run_output.workspace_path is None:
+            run_output.workspace_path = "/runs"
+        else:
+            run_output.workspace_path = run_output.workspace_path + "/runs"
+        return FileSystemSetUp.file_system_setup_factory(
+            run_output, path_type="dir", ssl_file=self.config.ssl_file
+        )
 
     def _coerce_stage(
         self,
@@ -742,8 +790,19 @@ class Pipeline:
         if callable(stage):
             return Stage.from_callable(stage)
 
-        if isinstance(stage, (str, Path)):
-            return Stage.from_file(stage)
+        if isinstance(stage, Path):
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", ssl_file=self.config.ssl_file
+                )
+            )
+
+        if isinstance(stage, str):
+            return Stage.from_file(
+                FileSystemSetUp.from_any(
+                    stage, path_type="file", ssl_file=self.config.ssl_file
+                )
+            )
 
         raise StageConfigurationError(
             f"Unsupported stage specification: {type(stage)!r}."
@@ -797,7 +856,9 @@ class Pipeline:
             )
 
         if isinstance(stage_config, (str, Path)):
-            payload = self._load_config_mapping(stage_config)
+            payload = self._load_config_mapping(
+                stage_config, ssl_file=self.config.ssl_file
+            )
             return self._coerce_stage_config(payload, name=name)
 
         raise StageConfigurationError(
@@ -964,6 +1025,7 @@ class Pipeline:
     def _resolve_config(
         self,
         config: PipelineConfig | Mapping[str, Any] | str | Path | None,
+        ssl_file: str | None = None,
     ) -> tuple[PipelineConfig, dict[str, StageConfig], list[Stage], GlobalConfig]:
         """
         Resolve supported configuration inputs into pipeline config, stage config, and stages.
@@ -1016,8 +1078,7 @@ class Pipeline:
                 [],
                 GlobalConfig.from_dict(global_configuration),
             )
-
-        raw_config = self._load_config_mapping(config)
+        raw_config = self._load_config_mapping(config, ssl_file=ssl_file)
         pipeline_payload, stage_config_payload, global_config_payload = (
             self._split_config_sections(raw_config)
         )
@@ -1029,6 +1090,7 @@ class Pipeline:
         stage_configs = self._build_stage_configs(stage_config_payload)
         configured_stages = self._build_stages_from_config(
             stage_definitions,
+            ssl_file=ssl_file,
             backend=pipeline_config.backend,
             work_dir=pipeline_config.work_dir,
         )
@@ -1125,9 +1187,9 @@ class Pipeline:
 
         Raises
         ------
-        StageConfigurationError
+        ``StageConfigurationError``
             If the overwrite parameter in the PipelineConfig is set to False and the output directory already exists.
-        StageConfigurationWarning
+        ``StageConfigurationWarning``
             If the overwrite parameter in the PipelineConfig is set to True and the output directory already exists.
         """
 
@@ -1144,11 +1206,21 @@ class Pipeline:
                 if not output_dir:
                     continue
 
-                output_path = Path(output_dir)
-                if not output_path.is_absolute():
-                    output_path = self.config.work_dir / output_path
+                output_path = str(output_dir)
+                output_path_fs_setup = FileSystemSetUp.from_any(
+                    output_path, ssl_file=self.config.ssl_file
+                )
+                output_path_file_system = FileSystemFactory.create(output_path_fs_setup)
+                if not output_path_file_system.is_absolute("dir"):
+                    output_path = str(self.config.work_dir) + "/" + output_path
+                    output_path_fs_setup = FileSystemSetUp.from_any(
+                        output_path, ssl_file=self.config.ssl_file
+                    )
+                    output_path_file_system = FileSystemFactory.create(
+                        output_path_fs_setup
+                    )
 
-                exists = output_path.exists()
+                exists = output_path_file_system.exists("dir")
                 overwrite = bool(self.config.overwrite)
 
                 if exists and not overwrite:
@@ -1204,8 +1276,9 @@ class Pipeline:
         self,
         stage_definitions: Sequence[Any] | None,
         *,
+        ssl_file: str | None = None,
         backend: str,
-        work_dir: Path,
+        work_dir: FileSystemSetUp,
     ) -> list[Stage]:
         """
         Convert configured stage definitions into ``Stage`` instances.
@@ -1228,7 +1301,7 @@ class Pipeline:
         configured_stages: list[Stage] = []
         for stage_definition in stage_definitions:
             stage = self._stage_from_config_definition(
-                stage_definition, backend=backend, work_dir=work_dir
+                stage_definition, ssl_file=ssl_file, backend=backend, work_dir=work_dir
             )
             if stage is not None:
                 configured_stages.append(stage)
@@ -1237,9 +1310,10 @@ class Pipeline:
     def _stage_from_config_definition(
         self,
         stage_definition: Any,
+        ssl_file: str | None = None,
         *,
         backend: str,
-        work_dir: Path,
+        work_dir: FileSystemSetUp,
     ) -> Stage | None:
         """
         Resolve one configured stage entry into a ``Stage`` instance.
@@ -1293,6 +1367,21 @@ class Pipeline:
         source = self._resolve_stage_source(
             stage_name=str(stage_name), location=location, work_dir=work_dir
         )
+        if isinstance(source, Path):
+            source = FileSystemSetUp.from_path(
+                source, path_type="file", ssl_file=ssl_file
+            )
+
+        if isinstance(source, str):
+            source = FileSystemSetUp.from_str(
+                source, path_type="file", ssl_file=ssl_file
+            )
+
+        if not source:
+            raise StageConfigurationError(
+                f"Stage '{stage_name}' has no source location defined."
+            )
+
         return Stage.from_file(
             source,
             name=str(stage_name),
@@ -1463,6 +1552,7 @@ class Pipeline:
         dependencies: Mapping[str, Sequence[str]] | None = None,
         logger: Logger | None = None,
         executor: StageExecutor | None = None,
+        ssl_file: str | None = None,
     ) -> Pipeline:
         """
         Extracts the information from files regarding exactly what is being run in the pipeline and
@@ -1492,8 +1582,18 @@ class Pipeline:
         """
         stages: list[Stage] = []
         for file_path in file_paths:
-            path = Path(file_path)
-            stage_name = path.stem
+            if isinstance(file_path, str):
+                path = FileSystemSetUp.from_str(file_path, ssl_file=ssl_file)
+            elif isinstance(file_path, Path):
+                path = FileSystemSetUp.from_path(
+                    file_path, path_type="file", ssl_file=ssl_file
+                )
+            else:
+                raise PipelineConfigurationError(
+                    f"File should be a string or a Path object. Yours is {type(file_path)}"
+                )
+            fs = FileSystemFactory.create(path)
+            stage_name = fs.stem(type="data")
             stage_dependencies = cls._dependencies_for_stage(
                 stage_name, path, dependencies
             )
@@ -1513,6 +1613,7 @@ class Pipeline:
             stages=stages,
             logger=logger,
             executor=executor,
+            ssl_file=ssl_file,
         )
 
     @classmethod
@@ -1523,6 +1624,7 @@ class Pipeline:
         backend: str = "python",
         logger: Logger | None = None,
         executor: StageExecutor | None = None,
+        ssl_file: str | None = None,
     ) -> Pipeline:
         """
         Extracts information from a dictionary to configure a Pipeline instance as
@@ -1555,6 +1657,7 @@ class Pipeline:
             stages=None,
             logger=logger,
             executor=executor,
+            ssl_file=ssl_file,
         )
 
     @classmethod
@@ -1565,6 +1668,7 @@ class Pipeline:
         backend: str = "python",
         logger: Logger | None = None,
         executor: StageExecutor | None = None,
+        ssl_file: str | None = None,
     ) -> Pipeline:
         """
         Construct a pipeline directly from a composite configuration payload or file.
@@ -1572,7 +1676,7 @@ class Pipeline:
         This is the preferred entrypoint when configuration defines both pipeline-level
         settings and the stage-level configuration that should be injected at runtime.
         """
-        extracted_config = Pipeline._load_config_mapping(config)
+        extracted_config = Pipeline._load_config_mapping(config, ssl_file=ssl_file)
 
         return cls.from_dict(
             config=extracted_config,
@@ -1580,6 +1684,7 @@ class Pipeline:
             backend=backend,
             logger=logger,
             executor=executor,
+            ssl_file=ssl_file,
         )
 
     @staticmethod
@@ -1610,6 +1715,7 @@ class Pipeline:
     @staticmethod
     def _load_config_mapping(
         config: Mapping[str, Any] | str | Path,
+        ssl_file: str | None = None,
     ) -> dict[str, Any]:
         """
         Load raw configuration data from a mapping or YAML file.
@@ -1617,17 +1723,19 @@ class Pipeline:
         if isinstance(config, Mapping):
             return dict(config)
 
-        config_path = Path(config).expanduser()
-        if config_path.suffix.lower() not in ACCEPTED_CONFIG_TYPES:
+        config_fs_setup = FileSystemSetUp.from_any(config, ssl_file=ssl_file)
+        config_file_system = FileSystemFactory.create(config_fs_setup)
+        config_path = config_file_system.expand_user()
+        if config_file_system.suffix().lower() not in ACCEPTED_CONFIG_TYPES:
             raise StageConfigurationError(
                 f"Unsupported config file format parsed as Stage Configuration: {config!r}."
             )
-        if not config_path.exists():
+        if not config_file_system.exists(type="data"):
             raise FileNotFoundError(f"Config file does not exist: {config_path}")
 
         import yaml
 
-        raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        raw_config = yaml.safe_load(config_file_system.read_text())
         if raw_config is None:
             warnings.warn(
                 "No configuration has loaded from the configuration file. Please check "
@@ -1892,7 +2000,9 @@ class Pipeline:
         return stage_configs
 
     @staticmethod
-    def _resolve_stage_source(stage_name: str, location: Any, work_dir: Path) -> Path:
+    def _resolve_stage_source(
+        stage_name: str, location: Any, work_dir: FileSystemSetUp
+    ) -> FileSystemSetUp | Path | str | None:
         """
         Resolve the source path for a configured stage.
 
@@ -1900,14 +2010,24 @@ class Pipeline:
         paths are first interpreted as given and then relative to ``work_dir``.
         """
         if location in (None, ""):
-            return work_dir / "scripts" / f"{stage_name}.py"
+            file_system_work_dir = FileSystemFactory.create(work_dir)
+            return str(file_system_work_dir.dir_path) + "/scripts/" + f"{stage_name}.py"
 
-        candidate = Path(location).expanduser()
-        if candidate.is_absolute() or candidate.exists():
-            return candidate
+        candidate_fs_setup = FileSystemSetUp.from_any(
+            location, path_type="file", ssl_file=work_dir.ssl_file
+        )
+        candidate_fs = FileSystemFactory.create(candidate_fs_setup)
+        candidate = candidate_fs.expand_user()
+        candidate_fs = FileSystemFactory.update_fs(candidate, candidate_fs)
+        if candidate_fs.is_absolute(type="data") or candidate_fs.exists(type="data"):
+            return candidate_fs.data_path
 
-        work_dir_candidate = work_dir / candidate
-        if work_dir_candidate.exists():
+        work_dir_candidate = str(work_dir.create_uri()) + "/" + candidate
+        work_dir_candidate_fs_setup = FileSystemSetUp.file_system_setup_factory(
+            work_dir_candidate, path_type="file", ssl_file=work_dir.ssl_file
+        )
+        work_dir_candidate_fs = FileSystemFactory.create(work_dir_candidate_fs_setup)
+        if work_dir_candidate_fs.exists(type="data"):
             return work_dir_candidate
 
         return candidate
@@ -1915,7 +2035,7 @@ class Pipeline:
     @staticmethod
     def _dependencies_for_stage(
         stage_name: str,
-        path: Path | Callable[..., Any] | None = None,
+        path: FileSystemSetUp | Path | Callable[..., Any] | str | None = None,
         dependencies: Mapping[str, Sequence[str]] | None = None,
     ) -> tuple[str, ...]:
         """
@@ -1929,8 +2049,8 @@ class Pipeline:
         ----------
         ``stage_name`` : str
             The name of the stage that you are extracting the ``dependencies`` for.
-        ``path`` : Path
-            The filepath for the stage source.
+        ``path`` : FileSystemSetUp, Path, Callable[..., Any], str, or None
+            The file system setup, path, callable, or string for the stage source.
         ``dependencies`` : Mapping[str, Sequence[str]] or None
             Mapping of the stage source name to their relevant ``dependencies`` (stages
             required to run before the ``stage_name`` Stage).
@@ -1940,6 +2060,15 @@ class Pipeline:
         candidates: tuple[str, ...]
         if isinstance(path, Path):
             candidates = (stage_name, path.name, path.stem, str(path), path.as_posix())
+        elif isinstance(path, FileSystemSetUp):
+            if path.file_name:
+                candidates = (stage_name, str(path), path.create_uri(), path.file_name)
+            else:
+                candidates = (
+                    stage_name,
+                    str(path),
+                    path.create_uri(),
+                )
         elif callable(path):
             candidates = (stage_name, str(getattr(path, "__name__", stage_name)))
         else:

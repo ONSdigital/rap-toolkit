@@ -1,6 +1,6 @@
 # Configuration
 
-This document describes how configuration flows through the onsrap pipeline
+This document describes how configuration flows through the `rap-toolkit` pipeline
 architecture, from the initial input accepted at construction time through to the
 point where individual stage scripts read their own variables at execution time.
 
@@ -8,7 +8,7 @@ point where individual stage scripts read their own variables at execution time.
 
 ## Overview
 
-onsrap uses three distinct levels of configuration.
+`rap-toolkit` uses three distinct levels of configuration.
 
 | Level | Object | Scope |
 |---|---|---|
@@ -27,7 +27,7 @@ the domain logic a stage script contains.
 
 ### `PipelineConfig`
 
-Defined in `onsrap/models.py`. Holds every setting that controls how the runner
+Defined in `rap_toolkit/models.py`. Holds every setting that controls how the runner
 behaves.
 
 | Field | Type | Default | Description |
@@ -36,7 +36,7 @@ behaves.
 | `backend` | `str` | `"python"` | Execution backend. Currently only `"python"` is implemented. |
 | `work_dir` | `Path` | `Path.cwd()` | Working directory used for stage file discovery and subprocess execution. |
 | `project_root` | `Path \| None` | `None` → falls back to `work_dir` | Root used to construct `runs/<run_id>` output directories. |
-| `log_dir` | `Path` | `Path("logs")` | Directory where `onsrap.log` is written. |
+| `log_dir` | `Path` | `Path("logs")` | Directory where `rap-toolkit.log` is written. |
 | `data_dir` | `Path` | `Path("data")` | Conventional location for input data. Not enforced by the runner; available to stages via `context.config.data_dir`. |
 | `output_dir` | `Path \| None` | `None` | Conventional location for pipeline outputs. Not enforced by the runner; available to stages via `context.config.output_dir`. |
 | `allow_subprocess_fallback` | `bool` | `True` | When `True`, stage files without a recognised entrypoint function (`run`, `main`, `execute`) are executed as plain scripts via subprocess. Set to `False` to require entrypoints everywhere. |
@@ -49,7 +49,7 @@ from a raw mapping or YAML file.
 
 ### `StageConfig`
 
-Defined in `onsrap/models.py`. Holds every setting that should be visible to one
+Defined in `rap_toolkit/models.py`. Holds every setting that should be visible to one
 specific stage script.
 
 | Attribute | Access | Description |

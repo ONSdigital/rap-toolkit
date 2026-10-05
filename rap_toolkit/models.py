@@ -8,6 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Optional, overload
 
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import PipelineConfigurationError, StageConfigurationError
 
 
@@ -37,6 +39,11 @@ class PipelineStatus(str, Enum):
 def now() -> datetime:
     """
     Function to extract the current time in a datetime format.
+
+    Returns
+    -------
+    datetime
+        The current local time.
     """
     return datetime.now()
 
@@ -44,6 +51,11 @@ def now() -> datetime:
 def utcnow() -> datetime:
     """
     Function to extract the current time in UTC in a datetime format.
+
+    Returns
+    -------
+    datetime
+        The current time in UTC.
     """
     return now()
 
@@ -75,24 +87,44 @@ class RuntimeID:
     def get_id(self) -> str:
         """
         Getter function to extract the ``id`` attribute.
+
+        Returns
+        -------
+        str
+            The runtime ID string.
         """
         return self.id
 
     def get_timestamp(self) -> datetime:
         """
         Getter function to extract the ``timestamp`` attribute.
+
+        Returns
+        -------
+        datetime
+            The runtime timestamp.
         """
         return self.timestamp
 
     def get_hash(self) -> str:
         """
         Getter function to extract the ``hash`` attribute.
+
+        Returns
+        -------
+        str
+            The runtime hash.
         """
         return self.hash
 
     def get_short_hash(self) -> str:
         """
         Getter function to extract the ``short_hash`` attribute.
+
+        Returns
+        -------
+        str
+            The shortened runtime hash.
         """
         return self.short_hash
 
@@ -137,23 +169,54 @@ class PipelineConfig:
     name: Optional[str] = None
     stages_to_run: Optional[dict[str, bool]] = None
     backend: str = "python"
-    work_dir: Path = field(default_factory=Path.cwd)
-    project_root: Optional[Path] = None
-    output_dir: Optional[Path] = None
-    log_dir: Path = field(default_factory=lambda: Path("logs"))
-    data_dir: Path = field(default_factory=lambda: Path("data"))
+    work_dir: FileSystemSetUp = field(default_factory=lambda: FileSystemSetUp())
+    project_root: Optional[FileSystemSetUp] = None
+    output_dir: Optional[FileSystemSetUp] = None
+    log_dir: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp(workspace_path="logs")
+    )
+    data_dir: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp(workspace_path="data")
+    )
     allow_subprocess_fallback: bool = True
     python_executable: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
     overwrite: bool = False
+    ssl_file: str | None = None
 
     def __post_init__(self) -> None:
         """
-        Post-initialization method to ensure that the ``work_dir`` and ``project_root``
-        attributes are set correctly.
+        Post-initialization method to ensure that all directory attributes are
+        correctly typed as FileSystemSetUp instances and any other attributes are
+        stored in the correct formats.
         """
         if self.stages_to_run is None:
             self.stages_to_run = {}
+
+        if not isinstance(self.work_dir, FileSystemSetUp):
+            self.work_dir = FileSystemSetUp.file_system_setup_factory(
+                self.work_dir, path_type="dir", ssl_file=self.ssl_file
+            )
+        if self.project_root is not None and not isinstance(
+            self.project_root, FileSystemSetUp
+        ):
+            self.project_root = FileSystemSetUp.file_system_setup_factory(
+                self.project_root, path_type="dir", ssl_file=self.ssl_file
+            )
+        if self.output_dir is not None and not isinstance(
+            self.output_dir, FileSystemSetUp
+        ):
+            self.output_dir = FileSystemSetUp.file_system_setup_factory(
+                self.output_dir, path_type="dir", ssl_file=self.ssl_file
+            )
+        if not isinstance(self.log_dir, FileSystemSetUp):
+            self.log_dir = FileSystemSetUp.file_system_setup_factory(
+                self.log_dir, path_type="dir", ssl_file=self.ssl_file
+            )
+        if not isinstance(self.data_dir, FileSystemSetUp):
+            self.data_dir = FileSystemSetUp.file_system_setup_factory(
+                self.data_dir, path_type="dir", ssl_file=self.ssl_file
+            )
 
     def __str__(self) -> str:
         """
@@ -225,7 +288,8 @@ class PipelineConfig:
             return cls.from_mapping(dict(value))
 
         if isinstance(value, (str, Path)):
-            return cls.from_file(Path(value))
+            uri = FileSystemSetUp.from_any(value, ssl_file=cls.ssl_file)
+            return cls.from_file(uri)
 
         raise TypeError("Unsupported pipeline config type: {0!r}".format(type(value)))
 
@@ -255,17 +319,25 @@ class PipelineConfig:
         name = payload.pop("name", None)
 
         backend = payload.pop("backend", "python")
+        ssl_file = payload.pop("ssl_file", None)
         stages_to_run = PipelineConfig._extract_stages_run(payload)
-        work_dir = Path(payload.pop("work_dir", Path.cwd()))
-        project_root_value = payload.pop("project_root", None)
-        output_dir_value = payload.pop("output_dir", None)
-        project_root = (
-            Path(project_root_value) if project_root_value is not None else work_dir
+        work_dir = FileSystemSetUp.file_system_setup_factory(
+            payload.pop("work_dir", str(Path.cwd())), path_type="dir", ssl_file=ssl_file
         )
-        log_dir = Path(payload.pop("log_dir", "logs"))
-        data_dir = Path(payload.pop("data_dir", "data"))
+        project_root = FileSystemSetUp.file_system_setup_factory(
+            payload.pop("project_root", None), path_type="dir", ssl_file=ssl_file
+        )
+        output_dir_value = payload.pop("output_dir", None)
+        log_dir = FileSystemSetUp.file_system_setup_factory(
+            payload.pop("log_dir", "logs"), path_type="dir", ssl_file=ssl_file
+        )
+        data_dir = FileSystemSetUp.file_system_setup_factory(
+            payload.pop("data_dir", "data"), path_type="dir", ssl_file=ssl_file
+        )
+
         raw_subprocess_fallback = payload.pop("allow_subprocess_fallback", True)
         overwrite = PipelineConfig._to_bool(payload.pop("overwrite", False))
+
         if isinstance(raw_subprocess_fallback, str):
             warnings.warn(
                 "allow_subprocess_fallback should be a boolean, not a string. "
@@ -297,11 +369,12 @@ class PipelineConfig:
             allow_subprocess_fallback=allow_subprocess_fallback,
             overwrite=overwrite,
             python_executable=python_executable,
+            ssl_file=ssl_file,
             metadata=metadata,
         )
 
     @classmethod
-    def from_file(cls, path: Path) -> PipelineConfig:
+    def from_file(cls, path: FileSystemSetUp) -> PipelineConfig:
         """
         Extracts a mapping item from a file containing information about how the
         pipeline should run.
@@ -310,7 +383,7 @@ class PipelineConfig:
 
         Parameters
         ----------
-        ``path`` : Path
+        ``path`` : FileSystemSetUp
             The file path containing information to be converted into a PipelineConfig
             instance.
 
@@ -326,15 +399,19 @@ class PipelineConfig:
             If the file containing information about how the Pipeline runs does not
             contain a mapping type.
         """
-        config_path = Path(path).expanduser()
-        if not config_path.exists():
+        file_system = FileSystemFactory.create(path)
+        config_path = file_system.expand_user()
+        file_system = FileSystemFactory.create(
+            FileSystemSetUp.from_any(config_path, ssl_file=cls.ssl_file)
+        )
+        if not file_system.exists(type="data"):
             raise FileNotFoundError(
                 "Config file does not exist: {0}".format(config_path)
             )
 
         import yaml
 
-        raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        raw_config = yaml.safe_load(file_system.read_text(encoding="utf-8"))
         if raw_config is None:
             return cls()
 
@@ -353,15 +430,18 @@ class PipelineConfig:
         data = {
             "name": self.name,
             "backend": self.backend,
-            "work_dir": str(self.work_dir),
-            "project_root": str(self.project_root)
+            "work_dir": str(self.work_dir.create_uri()),
+            "project_root": str(self.project_root.create_uri())
             if self.project_root is not None
             else None,
-            "output_dir": str(self.output_dir) if self.output_dir is not None else None,
-            "log_dir": str(self.log_dir),
-            "data_dir": str(self.data_dir),
+            "output_dir": str(self.output_dir.create_uri())
+            if self.output_dir is not None
+            else None,
+            "log_dir": str(self.log_dir.create_uri()),
+            "data_dir": str(self.data_dir.create_uri()),
             "allow_subprocess_fallback": self.allow_subprocess_fallback,
             "python_executable": self.python_executable,
+            "ssl_file": self.ssl_file,
         }
         data.update(self.metadata)
         return data
@@ -500,18 +580,50 @@ class StageConfig:
     def variables(self) -> dict[str, Any]:
         """
         Return a copy of the stage variables without datasets or metadata.
+
+        Returns
+        -------
+        dict[str, Any]
+            A shallow copy of the configured stage variables.
         """
         return dict(self._variables)
 
     def get(self, variable: str, default: Any = None) -> Any:
         """
         Return a configured variable if present, otherwise return ``default``.
+
+        Parameters
+        ----------
+        ``variable`` : str
+            Name of the variable to look up.
+        ``default`` : Any, optional
+            Value to return if the variable is not defined.
+
+        Returns
+        -------
+        Any
+            The configured value or ``default``.
         """
         return self._variables.get(variable, default)
 
     def require(self, variable: str) -> Any:
         """
         Return a configured variable and raise if the stage does not define it.
+
+        Parameters
+        ----------
+        ``variable`` : str
+            Name of the variable to look up.
+
+        Returns
+        -------
+        Any
+            The configured value.
+
+        Raises
+        ------
+        ``StageConfigurationError``
+            If the variable is not defined.
         """
         if variable not in self._variables:
             raise StageConfigurationError(
@@ -522,6 +634,21 @@ class StageConfig:
     def get_variables(self, variable: Iterable[str] | str | None = None) -> Any:
         """
         Return all configured variables, one configured variable, or a selected subset.
+
+        Parameters
+        ----------
+        ``variable`` : Iterable[str] | str | None, optional
+            Variable name or names to return.
+
+        Returns
+        -------
+        Any
+            The selected variable values.
+
+        Raises
+        ------
+        ``StageConfigurationError``
+            If any requested variable is not defined.
         """
         if variable is None:
             return dict(self._variables)
@@ -548,6 +675,11 @@ class StageConfig:
     def to_dict(self) -> dict[str, Any]:
         """
         Serialize the stage configuration back to a mapping suitable for manifests.
+
+        Returns
+        -------
+        dict[str, Any]
+            Mapping representation of the stage configuration.
         """
         data = dict(self._variables)
         if self.metadata:
@@ -904,6 +1036,11 @@ class StageResult:
         Creates a new attribute in the ``StageResult`` class called ``succeeded`` that
         contains a boolean value indicating if the run was a success or not.
         Updates the ``status`` attribute to record that the Stage ran successfully.
+
+        Returns
+        -------
+        bool
+            ``True`` when the stage completed successfully.
         """
         return self.status == StageStatus.SUCCEEDED
 
@@ -912,6 +1049,11 @@ class StageResult:
         """
         Creates a new attribute in the ``StageResult`` class called ``duration_seconds``
         that holds the exact duration of the stage in seconds.
+
+        Returns
+        -------
+        float
+            Stage runtime in seconds.
         """
         return max((self.finished_at - self.started_at).total_seconds(), 0.0)
 
@@ -952,6 +1094,11 @@ class PipelineRun:
         ----------
         ``stage_name`` : str
             The name of the Stage that you are requesting the results for.
+
+        Returns
+        -------
+        StageResult | None
+            The matching stage result, if it exists.
         """
         for result in self.stage_results:
             if result.name == stage_name:
@@ -1016,7 +1163,9 @@ class PipelineRun:
         )
 
     @classmethod
-    def load_pipeline_run_for_historical_run(cls, file_path: Path) -> PipelineRun:
+    def load_pipeline_run_for_historical_run(
+        cls, file_path: FileSystemSetUp
+    ) -> PipelineRun:
         """
         Load a previously executed pipeline run from a YAML file.
 
@@ -1026,7 +1175,7 @@ class PipelineRun:
 
         Parameters
         ----------
-        ``file_path`` : Path
+        ``file_path`` : FileSystemSetUp
             The path to the YAML file containing the saved pipeline run.
 
         Returns
@@ -1041,10 +1190,14 @@ class PipelineRun:
         """
         import yaml
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"Pipeline run file does not exist: {file_path}")
+        fs = FileSystemFactory.create(file_path)
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        if not fs.exists(type="file"):
+            raise FileNotFoundError(
+                f"Pipeline run file does not exist: {file_path.create_uri()}"
+            )
+
+        with fs.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return cls._pipeline_run_from_dict(data)
@@ -1088,7 +1241,7 @@ def _format_dict(d: dict[str, Any] | dict[str, bool] | None, indent: int = 0) ->
     return "\n".join(lines)
 
 
-_YAML_TYPE_KEY = "__onsrap_yaml_type__"
+_YAML_TYPE_KEY = "__rap_toolkit_yaml_type__"
 _YAML_VALUE_KEY = "value"
 
 
@@ -1098,6 +1251,11 @@ def _yaml_safe_mapping_key(value: Any) -> str | int | float | bool | None:
 
     Complex key types are coerced to strings because YAML mappings require
     hashable scalar-like keys to round-trip predictably with ``yaml.safe_load``.
+
+    Returns
+    -------
+    str | int | float | bool | None
+        A YAML-safe mapping key.
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -1111,6 +1269,11 @@ def _yaml_safe_mapping_key(value: Any) -> str | int | float | bool | None:
 def _yaml_safe_encode(value: Any) -> Any:
     """
     Convert arbitrary Python values into structures accepted by ``yaml.safe_dump``.
+
+    Returns
+    -------
+    Any
+        A YAML-safe encoded value.
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -1186,6 +1349,11 @@ def _yaml_safe_encode(value: Any) -> Any:
 def _yaml_safe_decode(value: Any) -> Any:
     """
     Decode values previously produced by ``_yaml_safe_encode``.
+
+    Returns
+    -------
+    Any
+        The decoded Python value.
     """
     if isinstance(value, list):
         return [_yaml_safe_decode(item) for item in value]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from onsrap import Pipeline, PipelineConfig
+from rap_toolkit import Pipeline, PipelineConfig
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
 SCRIPTS_DIR = PIPELINE_ROOT / "scripts"

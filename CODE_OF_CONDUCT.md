@@ -1,4 +1,4 @@
-# Code of conduct for `onsrap`
+# Code of conduct for `rap-toolkit`
 
 [Our code of conduct can be found at
 `docs/contributor_guide/CODE_OF_CONDUCT.md`][code-of-conduct].

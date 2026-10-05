@@ -1,6 +1,6 @@
-# onsrap Architecture
+# `rap-toolkit` Architecture
 
-This document describes the current architecture of `onsrap` as a small pipeline orchestration package.
+This document describes the current architecture of `rap-toolkit` as a small pipeline orchestration package.
 
 The design goal is simple: take a pipeline made of existing files or callables, turn them into ordered stages, execute them safely, and capture a useful run record without forcing the user into a heavyweight workflow engine.
 

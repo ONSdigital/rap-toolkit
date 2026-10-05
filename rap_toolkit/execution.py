@@ -9,7 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from onsrap.warnings import StageConfigurationWarning
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+from rap_toolkit.warnings import StageConfigurationWarning
 
 from .errors import (
     PipelineConfigurationError,
@@ -52,6 +53,8 @@ class ExecutionContext:
         The logger used for this pipeline run.
     ``run_dir``: Path
         The directory that the run saved to.
+    ``file_system`` : FileSystem
+        The file system used for this pipeline run.
     ``started_at`` : datetime, default = current time
         The time that the pipeline run started.
     ``working_directory`` : Path, default = current working directory
@@ -72,9 +75,11 @@ class ExecutionContext:
     run_id: str
     config: PipelineConfig
     logger: Logger
-    run_dir: Path
+    run_dir: FileSystemSetUp
     started_at: datetime = field(default_factory=now)
-    working_directory: Path = field(default_factory=Path.cwd)
+    working_directory: FileSystemSetUp = field(
+        default_factory=lambda: FileSystemSetUp()
+    )
     stage_results: dict[str, StageResult] = field(default_factory=dict)
     stage_configs: dict[str, StageConfig] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
@@ -134,6 +139,11 @@ class ExecutionContext:
     def set_active_stage(self, stage_name: str | None) -> None:
         """
         Mark the stage currently being executed so ``stage_config`` resolves correctly.
+
+        Parameters
+        ----------
+        ``stage_name`` : str or None
+            Name of the active stage, or ``None`` when no stage is active.
         """
         self.active_stage_name = stage_name
 
@@ -147,6 +157,11 @@ class ExecutionContext:
         the variables dictionary.
 
         This property is ``None`` outside an active stage run.
+
+        Returns
+        -------
+        StageConfig | None
+            The configuration for the active stage, if any.
         """
         return self.stage_config_for(self.active_stage_name)
 
@@ -161,6 +176,12 @@ class ExecutionContext:
         ----------
         ``stage_name`` : str or None
             Name of the stage whose configuration should be returned.
+
+        Returns
+        -------
+        StageConfig | None
+            The matching stage configuration, or ``None`` if no stage name is
+            provided or no configuration is registered.
         """
         if stage_name is None:
             return None
@@ -176,43 +197,113 @@ class ExecutionContext:
 
         Returns
         -------
-        ``stage_outputs``
-            Dictionary containing the name of the stage and the associated outputs of
-            the run.
+        dict[str, Any]
+            Dictionary containing the outputs produced by each completed stage.
         """
         return {name: result.outputs for name, result in self.stage_results.items()}
 
-    def get_data_dir(self) -> Path:
+    def get_data_dir(self, path_type: str) -> str | Path:
         """
         Establishes the filepath that the data is held in.
 
+        Parameters
+        ----------
+        ``path_type`` : str
+            The representation to return, either ``"uri"`` or ``"path"``.
+
         Returns
         -------
-        Path
-            The file path for the location of the data being used in the pipeline.
+        str | Path
+            The data directory in the requested form.
+
+        Raises
+        ------
+        ``PipelineConfigurationError``
+            If the pipeline configuration is missing or the requested path type is invalid.
         """
         if self.config is not None:
-            return Path(self.config.data_dir)
+            if path_type == "uri":
+                uri = self.config.data_dir.create_uri()
+                return uri
+            if path_type == "path":
+                path = self.config.data_dir.create_path()
+                if path is None:
+                    raise PipelineConfigurationError(
+                        f"Your run_dir {self.run_dir} cannot be converted into a Path "
+                        f"object. It returns {path}. Please check your file system type."
+                    )
+                return path
 
         raise PipelineConfigurationError(
             "Please parse a PipelineConfig instance to the ExecutionContext."
         )
 
-    def resolve_output_root(self) -> Path:
+    def resolve_output_root(self, path_type: str) -> str | Path:
         """
         Establishes the filepath that the outputs are going to be saved to.
 
+        Parameters
+        ----------
+        ``path_type`` : str
+            The representation to return, either ``"uri"`` or ``"path"``.
+
         Returns
         -------
-        Path
-            The file path for the outputs of the run to be saved to.
+        str | Path
+            The run output directory in the requested form.
+
+        Raises
+        ------
+        ``PipelineConfigurationError``
+            If the run directory cannot be resolved for the requested path type.
         """
         if self.run_dir is not None:
-            return Path(self.run_dir)
+            if path_type == "uri":
+                uri = self.run_dir.create_uri()
+                return uri
+            if path_type == "path":
+                path = self.run_dir.create_path()
+                if path is None:
+                    raise PipelineConfigurationError(
+                        f"Your run_dir {self.run_dir} cannot be converted into a Path "
+                        f"object. It returns {path} Please check your file system type."
+                    )
+                return path
 
         raise PipelineConfigurationError(
             "Please parse a run directory to the ExecutionContext."
         )
+
+    def extract_bucket_and_key(self, path: str) -> tuple[str, str]:
+        """
+        Extracts the bucket and key from a given S3 path.
+
+        Parameters
+        ----------
+        ``path`` : str
+            The S3 path to extract the bucket and key from.
+
+        Returns
+        -------
+        tuple[str, str]
+            A tuple containing the bucket and key extracted from the S3 path.
+
+        Raises
+        ------
+        ``ValueError``
+            If the provided path is not a valid S3 path.
+        """
+        if not (path.startswith("s3://") or path.startswith("s3a://")):
+            raise ValueError(
+                f"Invalid S3 path: {path}. Must start with 's3://' or 's3a://'."
+            )
+        if path.startswith("s3://"):
+            parts = path[5:].split("/", 1)
+        else:  # s3a://
+            parts = path[6:].split("/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid S3 path: {path}. Must contain a bucket and key.")
+        return parts[0], parts[1]
 
     def get_stage_config(
         self, stage: str | None = None, with_global: bool = True, vars_only: bool = True
@@ -264,9 +355,10 @@ class ExecutionContext:
         stage_name: str | None,
         path_name: str | None,
         file_name: str | None,
-        root: Path,
+        root: FileSystemSetUp,
+        path_type: str,
         add_folder: list[str] | str | None = None,
-    ) -> Path:
+    ) -> str:
         """
         Returns a file path for a requested item.
 
@@ -283,36 +375,105 @@ class ExecutionContext:
             key/value pair within the output of the previous stage.
         ``file_name`` : str
             The name of the file that you are trying to access the Path for.
-        ``root`` : Path
-            The file path for the root of the directory. This should be denoted through
+        ``root`` : FileSystemSetUp
+            The file system setup for the root of the directory. This should be denoted through
             other methods.
+        ``path_type`` : str = "Path"
+            The type of path to return. Can be either ``uri`` or ``path``. Defaults to Path.
         ``add_folder`` : list[str] | str | None, default = None
             Additional folder name/s to add into the returned file path.
 
         Returns
         -------
-        Path
+        str
             The file path where data has previously been saved to to allow for extraction of
             that data throughout the pipeline.
         """
         result = self.result_for(stage_name) if stage_name is not None else None
+        if not isinstance(root, FileSystemSetUp):
+            new_root = FileSystemSetUp.file_system_setup_factory(
+                root, path_type="dir", ssl_file=self.config.ssl_file
+            )
+        else:
+            new_root = root
+        file_system = FileSystemFactory.create(new_root)
         if result is not None and path_name is not None:
             selected_path = result.outputs.get(path_name)
-            if selected_path:
-                return Path(selected_path)
+            if isinstance(selected_path, (str, Path)):
+                return (
+                    FileSystemSetUp.from_any(
+                        selected_path, path_type="file", ssl_file=self.config.ssl_file
+                    ).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(
+                        selected_path, path_type="file", ssl_file=self.config.ssl_file
+                    ).create_path()
+                )
         if isinstance(add_folder, list):
             if file_name is not None:
-                new_path = root.joinpath(*add_folder, file_name)
-                return new_path
-            new_path = root.joinpath(*add_folder)
-            return new_path
+                new_path = str(file_system.join_path(*add_folder, file_name))
+                return (
+                    FileSystemSetUp.from_any(
+                        new_path, ssl_file=self.config.ssl_file
+                    ).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(
+                        new_path, ssl_file=self.config.ssl_file
+                    ).create_path()
+                )
+            new_path = str(file_system.join_path(*add_folder))
+            return (
+                FileSystemSetUp.from_any(
+                    new_path, ssl_file=self.config.ssl_file
+                ).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(
+                    new_path, ssl_file=self.config.ssl_file
+                ).create_path()
+            )
         if isinstance(add_folder, str):
             if file_name is not None:
-                return root / add_folder / file_name
-            return root / add_folder
+                return (
+                    FileSystemSetUp.from_any(
+                        str(file_system.join_path(add_folder, file_name)),
+                        ssl_file=self.config.ssl_file,
+                    ).create_uri()
+                    if path_type == "uri"
+                    else FileSystemSetUp.from_any(
+                        str(file_system.join_path(add_folder, file_name)),
+                        ssl_file=self.config.ssl_file,
+                    ).create_path()
+                )
+            return (
+                FileSystemSetUp.from_any(
+                    str(file_system.join_path(add_folder)),
+                    ssl_file=self.config.ssl_file,
+                ).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(
+                    str(file_system.join_path(add_folder)),
+                    ssl_file=self.config.ssl_file,
+                ).create_path()
+            )
         if file_name is not None:
-            return root / file_name
-        return root
+            return (
+                FileSystemSetUp.from_any(
+                    str(file_system.join_path(file_name)), ssl_file=self.config.ssl_file
+                ).create_uri()
+                if path_type == "uri"
+                else FileSystemSetUp.from_any(
+                    str(file_system.join_path(file_name)), ssl_file=self.config.ssl_file
+                ).create_path()
+            )
+        return (
+            FileSystemSetUp.from_any(
+                str(file_system.join_path()), ssl_file=self.config.ssl_file
+            ).create_uri()
+            if path_type == "uri"
+            else FileSystemSetUp.from_any(
+                str(file_system.join_path()), ssl_file=self.config.ssl_file
+            ).create_path()
+        )
 
     def _combine_vars(self, stage: StageConfig | None = None) -> dict[str, Any]:
         """
@@ -325,6 +486,12 @@ class ExecutionContext:
         specific variables and returned as a dictionary. Conflicts raise a warning
         to alert the user that the stage configuration definition will be used as a
         priority.
+
+        Parameters
+        ----------
+        ``stage`` : StageConfig or None, optional
+            Stage configuration to merge with the global values. Defaults to the
+            active stage configuration.
 
         Returns
         -------
@@ -381,7 +548,19 @@ class StageExecutor(Protocol):
 
     def execute(self, stage: Stage, context: ExecutionContext) -> StageResult:
         """
-        Method to run ``Stage`` however implementation required
+        Execute a stage.
+
+        Parameters
+        ----------
+        ``stage`` : Stage
+            Stage to execute.
+        ``context`` : ExecutionContext
+            Execution context for the current pipeline run.
+
+        Returns
+        -------
+        StageResult
+            Result produced by the stage executor.
         """
         ...
 
@@ -409,8 +588,8 @@ class PythonStageExecutor:
         """
         Main function to select how ``Stage`` is run.
 
-        Identifies the type of ``source`` within the ``Stage`` and runs the relevant
-        function for that type.
+        Identifies the type of ``source`` within the ``Stage`` and runs the
+        relevant function for that type.
 
         Parameters
         ----------
@@ -420,21 +599,22 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
-        ------
-        ``StageResult`` instance.
+        Returns
+        -------
+        StageResult
+            Result produced by the stage execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
-            If the ``source`` is not a Path or a callable object.
+            If the stage source is not executable.
         """
         if callable(stage.source):
             return self._execute_callable(
                 stage, context, stage.source, stage.source_label
             )
 
-        if isinstance(stage.source, Path):
+        if isinstance(stage.source, FileSystemSetUp):
             return self._execute_file(stage, context)
 
         raise StageExecutionError(
@@ -471,14 +651,15 @@ class PythonStageExecutor:
         ``source_label`` : str or None
             The type of ``source`` for the ``Stage``.
 
-        Return
-        ------
-        ``StageResult`` class instance
+        Returns
+        -------
+        StageResult
+            Result produced by the callable execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
-            If the callable object cannot be run
+            If the callable object cannot be run.
         """
         started_at = now()
         context.logger.event(
@@ -528,19 +709,10 @@ class PythonStageExecutor:
 
     def _execute_file(self, stage: Stage, context: ExecutionContext) -> StageResult:
         """
-        Attempt to run a file.
-        Attempt to run a callable object.
+        Run a stage from a Python file.
 
-        Calls the logger.event() method to record an event and attempts to run
-        the callable parsed. If the callable cannot be run, an error is flagged and
-        the ``StageResult`` instance created shows a failure. If it can be run, the
-        callable is run and the ``StageResult`` instance shows a success. Metadata
-        is kept for the attempt including ``duration``, ``name``, ``outputs``, ``source``,
-         ``mode`` attempted, and ``errors``.
-        If there is no entrypoint or the entrypoint is not a callable object, an error will be
-        raised. ``_execute_subprocess()`` method called if no entrypoint is found. A
-        ``StageResult`` instance will be created to log the results of the ``Stage``run regardless
-        of success or failure.
+        If the file defines a preferred entrypoint, that callable is loaded and
+        executed. Otherwise, the stage may fall back to subprocess execution.
 
         Parameters
         ----------
@@ -549,21 +721,27 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
+        Returns
+        -------
+        StageResult
+            Result produced by the stage execution.
+
+        Raises
         ------
-        ``StageResult`` class instance
-
-        Raise
-        -----
         ``StageLoadError``
-            If the entrypoint in the stage is unable to be run.
+            If the entrypoint cannot be loaded.
         ``StageExecutionError``
-            If the entrypoint is not found.
+            If no callable entrypoint is available and subprocess fallback is disabled.
         """
-        path = stage.source
-        assert isinstance(path, Path)
 
-        if path.suffix.lower() == ".py":
+        path = stage.source
+        path = FileSystemSetUp.file_system_setup_factory(
+            path, path_type="file", ssl_file=context.config.ssl_file
+        )
+
+        assert isinstance(path, FileSystemSetUp)
+
+        if path.file_name and path.file_name.lower().endswith(".py"):
             entrypoint = stage.entrypoint or discover_python_entrypoint(path)
             if entrypoint is not None:
                 try:
@@ -629,18 +807,18 @@ class PythonStageExecutor:
         ``context`` : ``ExecutionContext`` class
             The metadata required to run the ``Stage``.
 
-        Return
-        ------
-        ``result``
-            A ``StageResult`` instance holding information on the ``Stage``.
+        Returns
+        -------
+        StageResult
+            Result produced by the subprocess execution.
 
-        Raise
-        -----
+        Raises
+        ------
         ``StageExecutionError``
             If the ``Stage`` script was unable to be run successfully.
         """
         path = stage.source
-        assert isinstance(path, Path)
+        assert isinstance(path, FileSystemSetUp)
 
         started_at = now()
         context.logger.event(
@@ -650,13 +828,18 @@ class PythonStageExecutor:
             source=str(path),
         )
 
-        command = [str(path)]
-        if path.suffix.lower() == ".py":
-            command = [context.config.python_executable or sys.executable, str(path)]
+        # TODO: currently subprocess will only work with LFS. Need an alternative for remote
+        command = [str(path.create_uri())]
+        stage_fs = FileSystemFactory.create(path)
+        if stage_fs.suffix().lower() == ".py":
+            command = [
+                context.config.python_executable or sys.executable,
+                str(path.create_path()),
+            ]
 
         completed = subprocess.run(
             command,
-            cwd=str(context.working_directory),
+            cwd=str(context.working_directory.create_path()),
             capture_output=True,
             text=True,
             check=False,
@@ -805,10 +988,10 @@ def _build_success_result(
     ``source`` : str or None
         The file/callable being run in the stage.
 
-    Return
-    ------
-    ``StageResult`` instance
-        Containing metadata for the stage run and showing that the run was a success.
+    Returns
+    -------
+    StageResult
+        Stage result containing metadata for the successful run.
     """
     if isinstance(output, StageResult):
         if output.name != stage.name:

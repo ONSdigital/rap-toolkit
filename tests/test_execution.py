@@ -3,17 +3,18 @@ from unittest.mock import Mock
 
 import pytest
 
-from onsrap.errors import PipelineConfigurationError
-from onsrap.execution import ExecutionContext, PythonStageExecutor
-from onsrap.logger import Logger
-from onsrap.models import (
+from rap_toolkit.errors import PipelineConfigurationError
+from rap_toolkit.execution import ExecutionContext, PythonStageExecutor
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.logger import Logger
+from rap_toolkit.models import (
     GlobalConfig,
     PipelineConfig,
     StageConfig,
     StageResult,
     StageStatus,
 )
-from onsrap.warnings import StageConfigurationWarning
+from rap_toolkit.warnings import StageConfigurationWarning
 
 
 @pytest.fixture
@@ -25,14 +26,14 @@ def logger() -> Logger:
 
 
 @pytest.fixture
-def config() -> PipelineConfig:
+def config(tmp_path) -> PipelineConfig:
     """
     Return a PipelineConfig object for testing.
     """
-    work_dir = Path("tmp/work_dir")
-    project_root = Path("tmp/project")
-    log_dir = Path("tmp/log")
-    data_dir = Path("tmp/config_data")
+    work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
+    project_root = FileSystemSetUp.from_path(tmp_path / "project_root")
+    log_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/log")
+    data_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/config_data")
     return PipelineConfig(
         "test_pipeline",
         {"stage_test": True},
@@ -61,7 +62,7 @@ def stage_config() -> StageConfig:
 
 
 @pytest.fixture
-def execution(config, logger, stageresult, stage_config) -> ExecutionContext:
+def execution(config, logger, stageresult, stage_config, tmp_path) -> ExecutionContext:
     """
     Create an ExecutionContext object for testing.
 
@@ -76,8 +77,8 @@ def execution(config, logger, stageresult, stage_config) -> ExecutionContext:
     ``stage_config`` : StageConfig
         A ``StageConfig`` object for testing.
     """
-    run_dir = Path("tmp/run")
-    work_dir = Path("tmp/work_dir")
+    run_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/runs")
+    work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
 
     return ExecutionContext(
         "test_pipeline",
@@ -131,7 +132,7 @@ def expected_recorded_stage_result() -> StageResult:
 
 class TestExecutionContext:
     def test_executioncontext_creation(
-        self, execution, logger, config, stageresult
+        self, execution, logger, config, stageresult, tmp_path
     ) -> None:
         """
         Test that the ExecutionContext creates the right attributes.
@@ -151,9 +152,13 @@ class TestExecutionContext:
         assert execution.run_id == "run_id_1234"
         assert execution.config == config
         assert execution.logger == logger
-        assert execution.run_dir == Path("tmp/run")
+        assert execution.run_dir == FileSystemSetUp.from_path(
+            tmp_path / "work_dir/runs"
+        )
         assert execution.started_at == "2024-05-06 15:45:30"
-        assert execution.working_directory == Path("tmp/work_dir")
+        assert execution.working_directory == FileSystemSetUp.from_path(
+            tmp_path / "work_dir"
+        )
         assert execution.stage_results == {"stage_test": stageresult}
         assert execution.variables == {}
 
@@ -223,7 +228,7 @@ class TestExecutionContext:
         assert execution.stage_outputs == {"stage_test": "example output"}
 
     @pytest.fixture
-    def blank_context_with_config_none(self, stageresult) -> ExecutionContext:
+    def blank_context_with_config_none(self, stageresult, tmp_path) -> ExecutionContext:
         """
         Fixture that returns a test ExecutionContext instance with a None config for
         testing error handling.
@@ -233,8 +238,8 @@ class TestExecutionContext:
         ``stageresult`` : StageResult
             A ``StageResult`` object for testing.
         """
-        run_dir = Path("tmp/run")
-        work_dir = Path("tmp/work_dir")
+        run_dir = FileSystemSetUp.from_path(tmp_path / "work_dir/runs")
+        work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
         return ExecutionContext(
             "test_pipeline",
             "run_id_1234",
@@ -247,7 +252,9 @@ class TestExecutionContext:
             {},
         )
 
-    def test_get_data_dir(self, execution, blank_context_with_config_none) -> None:
+    def test_get_data_dir(
+        self, execution, blank_context_with_config_none, tmp_path
+    ) -> None:
         """
         Tests that get_data_dir method extracts the path from the execution context
         or, if the context is None, returns an error to indicate that additional input
@@ -266,12 +273,31 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the config attribute of the ExecutionContext instance is None.
         """
-        assert execution.get_data_dir() == Path("tmp/config_data")
+        path = Path(tmp_path / "work_dir/config_data")
+        path.mkdir(parents=True, exist_ok=True)
+        assert (
+            execution.get_data_dir(path_type="uri")
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/config_data").create_uri()
+        )
+
+        assert (
+            execution.get_data_dir(path_type="path")
+            == FileSystemSetUp.from_path(
+                tmp_path / "work_dir/config_data"
+            ).create_path()
+        )
+
+        assert (
+            execution.get_data_dir(path_type="path")
+            == FileSystemSetUp.from_str(
+                str(tmp_path / "work_dir/config_data")
+            ).create_path()
+        )
 
         with pytest.raises(PipelineConfigurationError):
-            blank_context_with_config_none.get_data_dir()
+            blank_context_with_config_none.get_data_dir(path_type="uri")
 
-    def test_resolve_output_root(self, execution) -> None:
+    def test_resolve_output_root(self, execution, tmp_path) -> None:
         """
         Tests that resolve_output_root method extracts the path from the given run
         directory or, if None are given, raises an error to indicate additional input
@@ -287,8 +313,23 @@ class TestExecutionContext:
         ``PipelineConfigurationError``
             If the run_dir attribute of the ExecutionContext instance is None.
         """
-        work_dir = Path("tmp/work_dir")
-        assert execution.resolve_output_root() == Path("tmp/run")
+        work_dir = FileSystemSetUp.from_path(tmp_path / "work_dir")
+        path_dir = tmp_path / "work_dir/runs"
+        path_dir.mkdir(parents=True, exist_ok=True)
+        assert (
+            execution.resolve_output_root(path_type="uri")
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/runs").create_uri()
+        )
+
+        assert (
+            execution.resolve_output_root(path_type="path")
+            == FileSystemSetUp.from_path(tmp_path / "work_dir/runs").create_path()
+        )
+
+        assert (
+            execution.resolve_output_root(path_type="path")
+            == FileSystemSetUp.from_str(str(tmp_path / "work_dir/runs")).create_path()
+        )
 
         execution_blank_config = ExecutionContext(
             "test_pipeline",
@@ -303,7 +344,7 @@ class TestExecutionContext:
         )
 
         with pytest.raises(PipelineConfigurationError):
-            execution_blank_config.resolve_output_root()
+            execution_blank_config.resolve_output_root(path_type="uri")
 
     def test_stage_config_accessors_return_named_and_active_configs(
         self, config, logger
@@ -332,7 +373,7 @@ class TestExecutionContext:
             "run_id_1234",
             config,
             logger,
-            Path("tmp/run"),
+            FileSystemSetUp.from_str("work_dir/runs"),
             stage_configs={"stage_test": stage_config},
             active_stage_name="stage_test",
         )
@@ -433,26 +474,24 @@ class TestResolveGivenPath:
     """
 
     @pytest.mark.parametrize(
-        "add_folder,file_name,expected",
+        "add_folder,file_name",
         [
-            (
-                ["interim", "testing_files"],
-                "clean.py",
-                Path("tmp/data/interim/testing_files/clean.py"),
-            ),
-            ("interim", "clean.py", Path("tmp/data/interim/clean.py")),
-            (None, "clean.py", Path("tmp/data/clean.py")),
+            (["interim", "testing_files"], "clean.py"),
+            ("interim", "clean.py"),
+            (None, "clean.py"),
             (
                 ["interim", "testing_files"],
                 None,
-                Path("tmp/data/interim/testing_files"),
             ),
-            ("interim", None, Path("tmp/data/interim")),
-            (None, None, Path("tmp/data")),
+            ("interim", None),
+            (None, None),
         ],
     )
     def test_resolve_given_path_add_folders(
-        self, execution, add_folder, file_name, expected
+        self,
+        execution,
+        add_folder,
+        file_name,
     ) -> None:
         """
         Tests the add_folder functionality for lists, single strings, or None type in
@@ -472,11 +511,31 @@ class TestResolveGivenPath:
             The expected Path object that should be returned by the method.
         """
         path_name = "data_path"
-        root = Path("tmp/data")
+        root = FileSystemSetUp(
+            root="project_root", workspace_path="work_dir/data", ssl_file=None
+        )
+
+        base_dir = Path(root.root)
+        if root.workspace_path:
+            base_dir = base_dir.joinpath(*root.workspace_path.split("/"))
+
+        target_parts: list[str] = []
+        if isinstance(add_folder, str):
+            target_parts.extend(part for part in add_folder.split("/") if part)
+        elif isinstance(add_folder, list):
+            target_parts.extend(add_folder)
+        if file_name is not None:
+            target_parts.append(file_name)
+
+        expected_path = base_dir.joinpath(*target_parts).resolve().as_uri()
+        if not target_parts:
+            expected_path = base_dir.resolve().as_uri()
 
         assert (
-            execution.resolve_given_path(None, path_name, file_name, root, add_folder)
-            == expected
+            execution.resolve_given_path(
+                None, path_name, file_name, root, "uri", add_folder
+            )
+            == expected_path
         )
 
     def test_resolve_given_path_norm(self, execution) -> None:
@@ -501,11 +560,23 @@ class TestResolveGivenPath:
         )
         stage_name = "stage_test2"
         path_name = "data_path"
-        root = Path("tmp/data")
+        root = FileSystemSetUp(root="project_root", workspace_path="work_dir/data")
 
-        assert execution.resolve_given_path(
-            stage_name, path_name, None, root, None
-        ) == Path("clean.py")
+        expected_value = FileSystemSetUp.from_str("clean.py").create_uri()
+
+        expected_value_path = FileSystemSetUp.from_str("clean.py").create_path()
+
+        assert (
+            execution.resolve_given_path(stage_name, path_name, None, root, "uri", None)
+            == expected_value
+        )
+
+        assert (
+            execution.resolve_given_path(
+                stage_name, path_name, None, root, "path", None
+            )
+            == expected_value_path
+        )
 
 
 """TEST NOT RUN FOR StageExecutor AS COVERED UNDER PythonStageExecutor"""
@@ -622,3 +693,63 @@ class TestCombineVars:
             "global_var1": "value1",
             "global_var2": "value2",
         }
+
+
+class TestS3PathSplits:
+    def test_extract_bucket_and_key(self, execution) -> None:
+        """
+        Test that confirms that the S3 bucket and key are correctly extracted from a
+        given S3 URI.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        s3_uri = "s3://my-bucket/path/to/my/file.txt"
+        bucket, key = execution.extract_bucket_and_key(s3_uri)
+        assert bucket == "my-bucket"
+        assert key == "path/to/my/file.txt"
+
+    def test_extract_bucket_and_key_s3a(self, execution) -> None:
+        """
+        Test that confirms that the S3 bucket and key are correctly extracted from a
+        given S3 URI with the s3a:// scheme.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        s3_uri = "s3a://my-bucket/path/to/my/file.txt"
+        bucket, key = execution.extract_bucket_and_key(s3_uri)
+        assert bucket == "my-bucket"
+        assert key == "path/to/my/file.txt"
+
+    def test_extract_bucket_and_key_invalid_uri(self, execution) -> None:
+        """
+        Test that confirms that a ValueError is raised when an invalid S3 URI is
+        provided.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        invalid_s3_uri = "invalid://my-bucket/path/to/my/file.txt"
+        with pytest.raises(ValueError):
+            execution.extract_bucket_and_key(invalid_s3_uri)
+
+    def test_extract_bucket_and_key_missing_bucket(self, execution) -> None:
+        """
+        Test that confirms that a ValueError is raised when an S3 URI is provided
+        without a bucket name.
+
+        Parameters
+        ----------
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        """
+        missing_bucket_uri = "s3://"
+        with pytest.raises(ValueError):
+            execution.extract_bucket_and_key(missing_bucket_uri)

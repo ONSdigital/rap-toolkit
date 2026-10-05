@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
+
 from .errors import StageExecutionError
 from .execution import ExecutionContext
 from .logger import Logger
@@ -80,6 +82,11 @@ class PipelineRunner:
         ``pipeline`` : Pipeline
             A Pipeline instance that this method will run.
 
+        Returns
+        -------
+        PipelineRun
+            The completed pipeline run metadata.
+
         Raises
         ------
         ``StageExecutionError``
@@ -90,9 +97,16 @@ class PipelineRunner:
 
         runtime_id = pipeline._create_runtime_id()
         pipeline.id = runtime_id
-
-        run_dir = pipeline.run_output / runtime_id.get_id()
-        run_dir.mkdir(parents=True, exist_ok=True)
+        # copies the FileSystemSetUp in run_output to a new variable
+        run_dir_set_up = FileSystemSetUp.file_system_setup_factory(
+            pipeline.run_output, path_type="dir", ssl_file=pipeline.config.ssl_file
+        )
+        # changes the workspace path within the copied FileSystemSetUp to include the runtime_id
+        run_dir_set_up.workspace_path = (
+            run_dir_set_up.workspace_path + "/" + str(runtime_id.get_id())
+        )
+        file_system = FileSystemFactory.create(run_dir_set_up)
+        file_system.mkdir(parents=True, exist_ok=True)
 
         # Initialise the ExecutionContext which will be passed to each stage as it runs. This
         # context will hold the configuration for the pipeline and for each stage.
@@ -102,7 +116,7 @@ class PipelineRunner:
             run_id=runtime_id.get_id(),
             config=pipeline.config,
             logger=self.logger,
-            run_dir=run_dir,
+            run_dir=run_dir_set_up,
             started_at=started_at,
             working_directory=pipeline.config.work_dir,
             stage_configs=dict(pipeline.stage_configs),
@@ -117,7 +131,7 @@ class PipelineRunner:
         manifest.outputs = {}
         pipeline.manifest = manifest
 
-        _log_config(run_dir, context, manifest)
+        _log_config(run_dir_set_up, context, manifest)
 
         self.logger.event(
             "Pipeline started",
@@ -166,7 +180,9 @@ class PipelineRunner:
 
             # Creates attributes file in the run_directory to log information for later
             # analysis of pipeline runs
-            _log_pipeline_attributes(pipeline_run=run, run_dir=run_dir, context=context)
+            _log_pipeline_attributes(
+                pipeline_run=run, run_dir=run_dir_set_up, context=context
+            )
 
             self.logger.event(
                 "Pipeline failed",
@@ -191,7 +207,9 @@ class PipelineRunner:
 
         # Creates attributes file in the run_directory to log information for later
         # analysis of pipeline runs
-        _log_pipeline_attributes(pipeline_run=run, run_dir=run_dir, context=context)
+        _log_pipeline_attributes(
+            pipeline_run=run, run_dir=run_dir_set_up, context=context
+        )
 
         self.logger.event(
             "Pipeline completed",
@@ -208,9 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
     Determines what arguments are needed when running a Pipeline from the command line.
 
     Enables stages to be input, followed by a name if provided.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser configured for the command line interface.
     """
     parser = argparse.ArgumentParser(
-        description="Run an onsrap pipeline from Python files."
+        description="Run a `rap-toolkit` pipeline from Python files."
     )
     parser.add_argument(
         "stages", nargs="+", help="One or more Python stage files to run."
@@ -247,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _log_pipeline_attributes(
-    pipeline_run: PipelineRun, run_dir: Path, context: ExecutionContext
+    pipeline_run: PipelineRun, run_dir: FileSystemSetUp, context: ExecutionContext
 ) -> None:
     """
     Creates a YAML file within the run directory that contains information
@@ -258,29 +281,29 @@ def _log_pipeline_attributes(
     Parameters
     ----------
     ``pipeline_run`` : PipelineRun
-        The PipelineRun instance for the current run of the pipeline.
-    ``stage_results`` : list[StageResult]
-        A list of StageResult instances for the current run of the pipeline.
-    ``run_dir`` : Path
-        The directory where the pipeline run is being currently being executed.
+        The pipeline run to serialize.
+    ``run_dir`` : FileSystemSetUp
+        The directory where the pipeline run is being executed.
     ``context`` : ExecutionContext
-        The context of the current pipeline run, containing configuration and
-        state information.
+        The context for the current pipeline run.
     """
-    attributes_file = (
-        run_dir
-        / f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
+    attributes_file = FileSystemSetUp.file_system_setup_factory(
+        run_dir, path_type="dir", ssl_file=context.config.ssl_file
     )
+    attributes_file.file_name = (
+        f"pipeline_attributes_for_{context.pipeline_name}_{context.run_id[-8:]}.yaml"
+    )
+    file_system = FileSystemFactory.create(attributes_file)
     import yaml
 
-    with open(attributes_file, "w", encoding="utf-8") as f:
+    with file_system.open(mode="w", encoding="utf-8") as f:
         yaml.safe_dump(
             pipeline_run._pipeline_run_to_dict(), f, default_flow_style=False
         )
 
 
 def _log_config(
-    run_dir: Path, context: ExecutionContext, manifest: RunManifest
+    run_dir: FileSystemSetUp, context: ExecutionContext, manifest: RunManifest
 ) -> None:
     """
     Outputs the configurations used in an instance of a pipeline to a YAML file in the run directory.
@@ -289,24 +312,29 @@ def _log_config(
 
     Parameters
     ----------
-    ``run_dir`` : Path
+    ``run_dir`` : FileSystemSetUp
         The directory where the pipeline run is being executed.
     ``context`` : ExecutionContext
-        The context of the current pipeline run, containing configuration and state information.
+        The context of the current pipeline run.
     ``manifest`` : RunManifest
-        The manifest of the current pipeline run, containing metadata and outputs.
+        The manifest for the current pipeline run.
     """
     date = context.started_at.date()
-
-    config_file = (
-        run_dir
-        / f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"
+    config_file = FileSystemSetUp(
+        prefix=run_dir.prefix,
+        root=run_dir.root,
+        workspace_path=run_dir.workspace_path,
+        file_name=run_dir.file_name,
+        ssl_file=run_dir.ssl_file,
+    )
+    config_file.file_name = (
+        f"configuration_for_{context.pipeline_name}_{date}_{context.run_id[-8:]}.yaml"
     )
     import yaml
 
     config_to_dump = _yaml_safe_encode(manifest.config)
-
-    with open(config_file, "w", encoding="utf-8") as f:
+    file_system = FileSystemFactory.create(config_file)
+    with file_system.open(mode="w", encoding="utf-8") as f:
         yaml.safe_dump(config_to_dump or {}, f, default_flow_style=False)
 
 
@@ -393,7 +421,7 @@ def _print_diff(diff: dict) -> dict:
 
     Parameters
     ----------
-    diff : dict
+    ``diff`` : dict
         A dictionary describing the differences between two YAML files, structured as
         {changed: {}, added: {}, removed: {}}.
 

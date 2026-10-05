@@ -6,14 +6,14 @@ if TYPE_CHECKING:
     from .models import StageResult
 
 
-class OnsrapError(Exception):
-    """Base exception for onsrap."""
+class RapToolkitError(Exception):
+    """Base exception for `rap-toolkit`."""
 
 
-class PipelineValidationError(OnsrapError):
+class PipelineValidationError(RapToolkitError):
     """
     Raised when the pipeline definition is invalid.
-    Child class with ``OnsrapError`` as the parent class.
+    Child class with ``RapToolkitError`` as the parent class.
     """
 
 
@@ -45,10 +45,10 @@ class DependencyCycleError(PipelineValidationError):
     """
 
 
-class StageExecutionError(OnsrapError):
+class StageExecutionError(RapToolkitError):
     """
     Raised when a stage fails during execution.
-    Child class with ``OnsrapError`` as the parent class.
+    Child class with ``RapToolkitError`` as the parent class.
     """
 
     def __init__(
@@ -73,28 +73,28 @@ class StageLoadError(StageExecutionError):
     """
 
 
-class StageDependencyError(OnsrapError):
+class StageDependencyError(RapToolkitError):
     """
     Raised when incorrect inputs are provided to the dependency
     attribute of a Stage.
     """
 
 
-class PipelineInitialisationError(OnsrapError):
+class PipelineInitialisationError(RapToolkitError):
     """
     Raised when there is an error in definition of the Pipeline
     instance
     """
 
 
-class PipelineConfigurationError(OnsrapError):
+class PipelineConfigurationError(RapToolkitError):
     """
     Raised when there has been an issue with the PipelineConfig
     instance.
     """
 
 
-class HistoricalPipelineLoadError(OnsrapError):
+class HistoricalPipelineLoadError(RapToolkitError):
     """
     Raised when there is an issue loading a previous PipelineRun
     instance.

@@ -4,8 +4,9 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
+
+from rap_toolkit.file_system_setup import FileSystemFactory, FileSystemSetUp
 
 from .errors import HistoricalPipelineLoadError
 
@@ -21,13 +22,13 @@ class LogConfig:
         The directory where all logs are stored for the Pipeline.
     ``log_level`` : str, default = "INFO"
         Denotes how severe the log message is.
-    ``logger_name`` : str, default = "onsrap"
+    ``logger_name`` : str, default = "rap-toolkit"
         The name of the logging system.
     """
 
-    log_dir: str = "logs/"
+    log_dir: FileSystemSetUp
     log_level: str = "INFO"
-    logger_name: str = "onsrap"
+    logger_name: str = "rap-toolkit"
 
 
 class Logger:
@@ -42,19 +43,30 @@ class Logger:
 
     Parameters
     ----------
-    ``log_dir`` : str or Path, default = "logs/"
-        The directory where you'd like your logs stored.
+    ``log_dir`` : FileSystemSetUp
+        The file system setup for the directory where you'd like your logs stored.
     ``log_level`` : str, default = "INFO"
         The severity of the log.
     """
 
     _configured_loggers: set[str] = set()
 
-    def __init__(self, log_dir: str | Path = "logs/", log_level: str = "INFO"):
-        self.config = LogConfig(log_dir=str(log_dir), log_level=log_level)
-        self.log_dir = Path(self.config.log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        logger_name = f"{self.config.logger_name}:{self.log_dir.resolve()}"
+    # TODO: do these loggers work with remote file systems? Does this matter? Should
+    # probably be stored in Hive
+    def __init__(
+        self,
+        log_dir: FileSystemSetUp | None = None,
+        log_level: str = "INFO",
+    ):
+        if log_dir is None:
+            log_dir = FileSystemSetUp(workspace_path="logs")
+        self.config = LogConfig(log_dir=log_dir, log_level=log_level)
+        self.log_dir = log_dir
+
+        self.file_system = FileSystemFactory.create(self.log_dir)
+        self.file_system.mkdir(parents=True, exist_ok=True)
+
+        logger_name = f"{self.config.logger_name}:{self.log_dir}"
         self._logger = logging.getLogger(logger_name)
         self._logger.setLevel(
             getattr(logging, self.config.log_level.upper(), logging.INFO)
@@ -68,7 +80,7 @@ class Logger:
 
             try:
                 file_handler = logging.FileHandler(
-                    self.log_dir / "onsrap.log", encoding="utf-8"
+                    self.file_system.join_path("rap-toolkit.log"), encoding="utf-8"
                 )
                 file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
                 self._logger.addHandler(file_handler)
@@ -85,6 +97,13 @@ class Logger:
         Positional arguemnts are converted to strings and joined with spaces.
         Keyword arguments are serialised as JSON and appended as structured
         context.
+
+        Parameters
+        ----------
+        ``*args`` : Any
+            Positional message parts to join into the log message.
+        ``**kwargs`` : Any
+            Structured context values to serialize into the log entry.
         """
         message = " ".join(str(arg) for arg in args)
         if kwargs:
@@ -103,7 +122,7 @@ class Logger:
             A string representation of the ``Logger`` class with its attributes.
         """
         return (
-            f"Log Directory: {self.log_dir.resolve()}\n"
+            f"Log Directory: {self.file_system.resolve(type='dir')}\n"
             f"     Log Level: {self.config.log_level}"
         )
 
@@ -118,7 +137,7 @@ class Logger:
         str
             A string representation of the ``Logger`` class with its attributes.
         """
-        return f"Logger(log_dir={self.log_dir.resolve()}, log_level={self.config.log_level})"
+        return f"Logger(log_dir={self.file_system.resolve(type='dir')}, log_level={self.config.log_level})"
 
     def event(self, message: str, **kwargs: Any) -> None:
         """
@@ -155,14 +174,14 @@ class Logger:
             self._logger.warning(message)
 
     def extract_historical_run_ids(
-        self, run_root: Path, name: str
+        self, run_root: FileSystemSetUp, name: str
     ) -> list[dict[str, Any]]:
         """
         Extracts historical run IDs from the log files.
 
         Parameters
         ----------
-        ``run_root`` : Path
+        ``run_root`` : FileSystemSetUp
             The root directory where the historical runs are stored.
         ``name`` : str
             The name of the pipeline for which to extract historical run IDs.
@@ -171,7 +190,17 @@ class Logger:
         -------
         list[dict[str, Any]]
             A list of dictionaries containing run_id, timestamp, and run_dir for each historical run.
+
+        Raises
+        ------
+        ``HistoricalPipelineLoadError``
+            If the logger cannot be inspected for historical run data.
         """
+
+        # confirms that run_root is a FileSystemSetUp instance and if not, creates it
+        run_root = FileSystemSetUp.file_system_setup_factory(
+            run_root, path_type="dir", ssl_file=self.log_dir.ssl_file
+        )
 
         # ensure that logger is writing to a file and extract filepath
         if not self._logger.hasHandlers():
@@ -192,8 +221,14 @@ class Logger:
                 "for historical runs."
             )
 
-        logfile_path = logfile_handler.baseFilename
-        if not Path(logfile_path).exists():
+        logfile_path = self.file_system.join_path(logfile_handler.baseFilename)
+        logfile_path = FileSystemSetUp.from_any(
+            str(logfile_path), path_type="file", ssl_file=self.log_dir.ssl_file
+        )
+
+        new_fs = FileSystemFactory.update_fs(logfile_path, self.file_system)
+
+        if not new_fs.exists(type="data"):
             raise HistoricalPipelineLoadError(
                 "The log file does not exist at this location."
             )
@@ -203,9 +238,7 @@ class Logger:
         # TODO: This method works if the logs are recorded in chronological order. Would there
         # ever be a case where a record would appear below another and not be chronological?
         # If so, we may need to sort based on the timestamp rather than the ordering.
-        for raw_line in reversed(
-            Path(logfile_path).read_text(encoding="utf-8").splitlines()
-        ):
+        for raw_line in reversed(new_fs.read_text(encoding="utf-8").splitlines()):
             if "Pipeline started" not in raw_line or " | " not in raw_line:
                 continue
 
@@ -238,11 +271,15 @@ class Logger:
                 continue
             timestamp = f"{parts[0]} {parts[1]}"
 
-            run_dir = run_root / run_id
+            run_dir = str(run_root.create_uri() + "/" + run_id)
+            run_dir_setup = FileSystemSetUp.from_any(
+                run_dir, path_type="dir", ssl_file=self.log_dir.ssl_file
+            )
+            run_dir_fs = FileSystemFactory.update_fs(run_dir_setup, self.file_system)
             # only returns run_ids for runs where a run_directory is still present.
 
             log_name = payload.get("name")
-            if run_dir.exists() and log_name == name:
+            if run_dir_fs.exists(type="dir") and log_name == name:
                 matches.append(
                     {
                         "run_id": run_id,

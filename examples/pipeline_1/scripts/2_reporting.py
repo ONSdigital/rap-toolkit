@@ -82,9 +82,14 @@ def write_region_breakdown(region_path: Path, summary: dict[str, object]) -> Non
 
 
 def main(context=None) -> dict[str, object]:
-    output_root = context.resolve_output_root()
+    output_root = context.resolve_output_root(path_type="path")
     clean_path = context.resolve_given_path(
-        "1_preprocessing", "clean_path", "1_clean_orders.csv", output_root, "interim"
+        stage_name="1_preprocessing",
+        path_name="clean_path",
+        file_name="1_clean_orders.csv",
+        root=output_root,
+        path_type="path",
+        add_folder="interim",
     )
     summary_path = output_root / "processed" / "2_sales_summary.json"
     region_breakdown_path = output_root / "processed" / "2_revenue_by_region.csv"

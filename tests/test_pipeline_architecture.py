@@ -8,11 +8,12 @@ from textwrap import dedent
 import pytest
 import yaml
 
-from onsrap.errors import StageConfigurationError
-from onsrap.graph import StageGraph
-from onsrap.pipeline import Pipeline
-from onsrap.stage import Stage
-from onsrap.warnings import PipelineConfigurationWarning, StageConfigurationWarning
+from rap_toolkit.errors import StageConfigurationError
+from rap_toolkit.file_system_setup import FileSystemSetUp
+from rap_toolkit.graph import StageGraph
+from rap_toolkit.pipeline import Pipeline
+from rap_toolkit.stage import Stage
+from rap_toolkit.warnings import PipelineConfigurationWarning, StageConfigurationWarning
 
 NO_STAGES_SPECIFIED_WARNING = (
     "No stages specified to run. All stages running by default."
@@ -26,9 +27,15 @@ OUTPUT_DIRECTORY_WARNING = (
 def _base_pipeline_config(tmp_path: Path) -> dict:
     return {
         "pipeline_config": {
-            "work_dir": tmp_path,
-            "project_root": tmp_path,
-            "log_dir": tmp_path / "logs",
+            "work_dir": FileSystemSetUp.file_system_setup_factory(
+                tmp_path, path_type="dir"
+            ),
+            "project_root": FileSystemSetUp.file_system_setup_factory(
+                tmp_path, path_type="dir"
+            ),
+            "log_dir": FileSystemSetUp.file_system_setup_factory(
+                tmp_path / "logs", path_type="dir"
+            ),
         },
         "stage_configuration": {},
         "global_config": {},
@@ -131,12 +138,13 @@ class TestPipelineFromFiles:
                 from pathlib import Path
 
                 def main(context):
-                    output_path = Path(
-                        context.run_dir
-                        ) / "data" / "interim" / "artifact.txt"
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
-                    output_path.write_text(context.run_id, encoding="utf-8")
-                    return {"output_path": str(output_path), "run_id": context.run_id}
+                    if context.run_dir:
+                        output_path = context.run_dir.create_path() / "data" / "interim" / "artifact.txt"
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        output_path.write_text(context.run_id, encoding="utf-8")
+                        return {"output_path": str(output_path), "run_id": context.run_id}
+                    else:
+                        print
                 """
             ).strip()
             + "\n",
@@ -453,9 +461,16 @@ class TestPipelineFromConfig:
             pipeline = Pipeline.from_config(config_file)
 
         assert pipeline.name == "parse-test"
-        assert pipeline.config.work_dir == tmp_path
-        assert pipeline.config.project_root == tmp_path
-        assert pipeline.config.log_dir == tmp_path / "logs"
+        assert pipeline.config.work_dir == FileSystemSetUp.file_system_setup_factory(
+            tmp_path, path_type="dir"
+        )
+        assert (
+            pipeline.config.project_root
+            == FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        )
+        assert pipeline.config.log_dir == FileSystemSetUp.file_system_setup_factory(
+            (tmp_path / "logs"), path_type="dir"
+        )
         assert [stage.name for stage in pipeline.stages] == ["0_extract", "1_transform"]
         assert (
             pipeline.stages[0].source_path == (scripts_dir / "0_extract.py").resolve()
