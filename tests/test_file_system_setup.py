@@ -2,6 +2,9 @@ from rap_toolkit.file_system_setup import FileSystemSetUp
 
 
 def test_create_uri_preserves_percent_escaped_file_segments() -> None:
+    """
+    Test that the create_uri method preserves percent-escaped segments in file URIs.
+    """
     uri = "file:///tmp/folder%20name/report%231.txt"
 
     setup = FileSystemSetUp.from_str(uri)
@@ -10,6 +13,9 @@ def test_create_uri_preserves_percent_escaped_file_segments() -> None:
 
 
 def test_create_uri_preserves_percent_escaped_s3_segments() -> None:
+    """
+    Test that the create_uri method preserves percent-escaped segments in S3 URIs.
+    """
     uri = "s3://example-bucket/path%20with%20space/report%23final.csv"
 
     setup = FileSystemSetUp.from_str(uri)
