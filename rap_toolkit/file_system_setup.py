@@ -229,7 +229,7 @@ class FileSystemSetUp:
                 root=input.root,
                 workspace_path=input.workspace_path,
                 file_name=input.file_name,
-                ssl_file=ssl_file,
+                ssl_file=ssl_file if ssl_file is not None else input.ssl_file,
             )
             return new_fs_setup
         elif isinstance(input, (str, Path)):
@@ -718,7 +718,7 @@ class LocalFileSystem:
         if not self.data_path:
             raise ValueError("Data path is not set. Cannot open a file.")
         file = self.data_path
-        return open(file, mode=mode, encoding=encoding)
+        return open(file, mode=mode, encoding=None if "b" in mode else encoding)
 
     def glob(
         self,
@@ -1138,7 +1138,7 @@ class S3FileSystem:
         """
         if type == "dir":
             if self.dir_path:
-                return self.dir_path.startswith(f"s3://{self.setup.root}/")
+                return self.dir_path.startswith(f"{self.setup.prefix}{self.setup.root}/")
             else:
                 raise ValueError(
                     "Directory path is not set. Cannot check if it is absolute."
@@ -1462,7 +1462,7 @@ class S3FileSystem:
                 raise ValueError("Data path is not set. Cannot get parent.")
             purepath_obj = PurePosixPath(self.data_path)
             parent_obj = str(purepath_obj.parent)
-            non_prefix = parent_obj.split("s3:/")[-1]
+            non_prefix = parent_obj.removeprefix(self.setup.prefix.replace("://", ":/"))
             return str(self.setup.prefix + non_prefix)
         elif path_type == "dir":
             if not self.dir_path:

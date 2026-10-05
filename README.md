@@ -89,7 +89,7 @@ For more information on the ONS RAP Minimum Standards, please see the full [stan
 - **Python 3.10+ installed**
 - **Windows Operating System**
 - **Local File System or S3 Cloud Storage**
-- an **SSL_file** certification if using S3 Cloud Storage
+- an optional **ssl_file** certificate path when using Ranger RAZ (requires `raz_client`)
 
 *Package Dependencies*
 - **boto3** and **botocore** for S3 util

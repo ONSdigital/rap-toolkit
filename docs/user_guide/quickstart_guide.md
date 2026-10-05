@@ -44,7 +44,7 @@ A minimal pipeline can be created from a list of stage files:
 from pathlib import Path
 from rap_toolkit import Pipeline
 
-stages = [Path("examples/pipeline_1/scripts/1_stage.py")]
+stages = [Path("examples/pipeline_1/scripts/0_data_validation.py")]
 pipeline = Pipeline.from_files(stages)
 pipeline.run()
 ```
