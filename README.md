@@ -82,16 +82,20 @@ For more information on the ONS RAP Minimum Standards, please see the full [stan
 
 **Parent file:** There should be a parent file that sets out configuration, required directories and file paths, and builds the `Pipeline` instance. It is recommended that this is named something similar to `main.py` so that it is easy for users to see where the `Pipeline` starts. This file will be what is run through the terminal to run the entire pipeline.
 
-## Requirements
-
-- **Python 3.10+ installed**
-
-Contributors have some additional requirements - please see our [contributing guidance][contributing].
+*NB: Configuration can be stored in a separate configuration file if preferred*
 
 ## Dependencies / System Requirements
 
+- **Python 3.10+ installed**
 - **Windows Operating System**
-- **Local File System** *(support for remote/cloud computing in development)*
+- **Local File System or S3 Cloud Storage**
+- an **SSL_file** certification if using S3 Cloud Storage
+
+*Package Dependencies*
+- **boto3** and **botocore** for S3 util
+- **PyYaml**
+
+Contributors have some additional requirements - please see our [contributing guidance][contributing].
 
 ## Installing the package
 
@@ -209,6 +213,10 @@ All runs of the `Pipeline` will be stored in a `run_directory` that is unique. T
 
 There is also utility to use a configuration file to store all information required to run the `Pipeline`. Information on how to set up the configuration file can be found in our [configuration guidance][configuration_guidance].
 
+### S3 Functionality
+
+Due to the underlying structural differences between local file systems and cloud based file systems, some of the above is different if you require integration with accessing data from S3 file systems. If you are requiring S3 integration, please see the [S3 User Guidance][s3_user_guidance] page.
+
 ### Example Pipeline
 
 There are 2 example pipelines which live in `examples/pipeline_1/main.py` and `examples/pipeline_2/main.py`.
@@ -311,3 +319,4 @@ This project structure is based on the [`govcookiecutter` template project][govc
 [docs-loading-environment-variables-secrets]: https://github.com/best-practice-and-impact/govcookiecutter/blob/main/%7B%7B%20cookiecutter.repo_name%20%7D%7D/docs/user_guide/loading_environment_variables.md#storing-secrets-and-credentials
 [standards]: https://best-practice-and-impact.github.io/ONS_minimum_RAP/
 [configuration_guidance]: docs\user_guide\configuration_guidance.md
+[s3_user_guidance]: docs\user_guide\s3_user_guide.md
