@@ -729,7 +729,7 @@ class TestStageFromFile(TestStageFactories):
         ``temp_script`` : callable
             A fixture factory that creates temporary Python scripts.
         """
-        script = temp_script(
+        script, _ = temp_script(
             dedent(
                 """
                 def main():
@@ -751,7 +751,7 @@ class TestStageFromFile(TestStageFactories):
         )
 
         assert stage.name == "custom_name"
-        assert stage.source == script.resolve()
+        assert stage.source == script
         assert stage.dependencies == ("dep1", "dep2")
         assert stage.metadata == {"info": "example"}
         assert stage.entrypoint == "main"
@@ -944,7 +944,7 @@ class TestStageFromDict(TestStageFactories):
         ``temp_script`` : callable
             A fixture factory that creates temporary Python scripts.
         """
-        script = temp_script(
+        script, _ = temp_script(
             "def main():\n    return 42\n",
             "dict_stage.py",
         )
@@ -961,7 +961,7 @@ class TestStageFromDict(TestStageFactories):
         stage = Stage.from_dict(data)
 
         assert stage.name == "dict_file_stage"
-        assert stage.source == script.resolve()
+        assert stage.source == script
         assert stage.dependencies == ("dep1", "dep2")
         assert stage.metadata == {"info": "example"}
         assert stage.entrypoint == "main"

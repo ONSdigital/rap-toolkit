@@ -1236,7 +1236,7 @@ class TestExecuteSubprocess:
         )
 
         # Update execution to use tmp_path for working directory
-        execution.working_directory = tmp_path
+        execution.working_directory = FileSystemSetUp.from_path(tmp_path)
 
         with patch.object(execution.logger, "event"):
             result = pythonstageexecutor._execute_subprocess(stage, execution)
@@ -1278,7 +1278,7 @@ class TestExecuteSubprocess:
         )
 
         # Update execution to use tmp_path for working directory
-        execution.working_directory = tmp_path
+        execution.working_directory = FileSystemSetUp.from_path(tmp_path)
 
         with (
             patch.object(execution.logger, "event"),
