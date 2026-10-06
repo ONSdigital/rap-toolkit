@@ -23,8 +23,8 @@ from rap_toolkit.models import (
     StageResult,
     StageStatus,
 )
-from rap_toolkit.warnings import StageConfigurationWarning
 from rap_toolkit.stage import Stage
+from rap_toolkit.warnings import StageConfigurationWarning
 
 
 @pytest.fixture
@@ -908,7 +908,6 @@ class TestCombineVars:
         execution.global_config = GlobalConfig(
             _variables=global_vars, exclusion=exclusions
         )
-
         execution.stage_configs = {
             "stage_1": StageConfig(name="stage_1", _variables=stage_vars),
         }
@@ -1083,7 +1082,6 @@ class TestExecuteFile:
             metadata={},
             entrypoint="main",
         )
-        
 
         mock_result = Mock(spec=StageResult)
 
