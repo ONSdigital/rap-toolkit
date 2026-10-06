@@ -24,3 +24,10 @@ class ConfigurationInjectionWarning(RapToolkitWarning):
     Raised when the configuration injection is not optimal.
     Child class with ``RapToolkitWarning`` as the parent class.
     """
+
+
+class StageExecutionWarning(RapToolkitWarning):
+    """
+    Raised when the stage execution is not optimal.
+    Child class with ``RapToolkitWarning`` as the parent class.
+    """

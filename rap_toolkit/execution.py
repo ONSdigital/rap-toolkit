@@ -577,7 +577,7 @@ class PythonStageExecutor:
         self.preferred_entrypoints = preferred_entrypoints
 
     def __str__(self) -> str:
-        return f"PythonStageExecutor: \n         Preferred Entrypoints: {self.preferred_entrypoints})"
+        return f"PythonStageExecutor: \n         Preferred Entrypoints: {self.preferred_entrypoints}"
 
     def __repr__(self) -> str:
         return (
@@ -608,6 +608,9 @@ class PythonStageExecutor:
         ------
         ``StageExecutionError``
             If the stage source is not executable.
+
+        ``StageExecutionWarning``
+            If the stage source is an S3 file, a warning is raised to alert the user that S3 sources are not supported for Python stages.
         """
         if callable(stage.source):
             return self._execute_callable(
@@ -615,6 +618,11 @@ class PythonStageExecutor:
             )
 
         if isinstance(stage.source, FileSystemSetUp):
+            if not stage.source.prefix.startswith("file://"):
+                raise StageExecutionError(
+                    f"The source type for {stage.name} is not supported. Please use a local file system source for Python stages.",
+                )
+
             return self._execute_file(stage, context)
 
         raise StageExecutionError(
@@ -785,7 +793,14 @@ class PythonStageExecutor:
                     result=failed_result,
                 )
 
-        return self._execute_subprocess(stage, context)
+            return self._execute_subprocess(stage, context)
+
+        else:
+            raise StageExecutionError(
+                "Stage source is not a Python file.",
+                stage_name=stage.name,
+                source=str(path),
+            )
 
     def _execute_subprocess(
         self, stage: Stage, context: ExecutionContext

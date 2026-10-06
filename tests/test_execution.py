@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -709,6 +710,35 @@ class TestPythonStageExecutor:
         """
         assert pythonstageexecutor.preferred_entrypoints == ("main.py", "run.py")
 
+    def test_pythonstageexecutor_str(self, pythonstageexecutor) -> None:
+        """
+        Checks that the string representation of the PythonStageExecutor instance is
+        correct.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        """
+        assert str(pythonstageexecutor) == (
+            f"PythonStageExecutor: \n"
+            f"         Preferred Entrypoints: {pythonstageexecutor.preferred_entrypoints}"
+        )
+
+    def test_pythonstageexecutor_repr(self, pythonstageexecutor) -> None:
+        """
+        Checks that the string representation of the PythonStageExecutor instance is
+        correct.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        """
+        assert repr(pythonstageexecutor) == (
+            f"PythonStageExecutor(preferred_entrypoints={pythonstageexecutor.preferred_entrypoints})"
+        )
+
     def test_execute_dispatches_callable_sources(
         self, pythonstageexecutor, stage_test, execution
     ) -> None:
@@ -753,10 +783,11 @@ class TestPythonStageExecutor:
         """
         script = tmp_path / "test_script.py"
         script.write_text("def main(): pass\n")
+        script_fs = FileSystemSetUp.from_path(script)
 
         stage = Stage(
             name="file_stage",
-            source=script,
+            source=script_fs,
             dependencies=[],
             metadata={},
         )
@@ -1207,6 +1238,72 @@ class TestExecuteFile:
         assert result == mock_result
         mock_subprocess.assert_called_once_with(stage, execution)
 
+    def test_execute_file_is_s3_warning(self, pythonstageexecutor, execution) -> None:
+        """
+        Tests that _execute_file raises StageExecutionWarning when the source is an S3
+        path.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+
+        Raises
+        ------
+        ``StageExecutionWarning``
+            When the source is an S3 path.
+        """
+        stage = Stage(
+            name="s3_stage",
+            source=FileSystemSetUp.from_str("s3://bucket/path/to/script.py"),
+            dependencies=[],
+            metadata={},
+        )
+
+        with pytest.raises(StageExecutionError) as exc_info:
+            pythonstageexecutor.execute(stage, execution)
+
+        assert "is not supported. Please use a local file system" in str(exc_info.value)
+
+    def test_execute_file_is_not_py(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_file raises StageExecutionError when the source is not a
+        Python file.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+
+        Raises
+        ------
+        ``StageExecutionError``
+            When the source is not a Python file.
+        """
+        script = tmp_path / "not_a_python_file.txt"
+        script.write_text("This is not a Python file.")
+
+        stage = Stage(
+            name="not_py_stage",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        with pytest.raises(StageExecutionError) as exc_info:
+            pythonstageexecutor._execute_file(stage, execution)
+
+        assert exc_info.value.stage_name == stage.name
+        assert "is not a Python file" in str(exc_info.value)
+
 
 class TestExecuteSubprocess:
     def test_execute_subprocess_success(
@@ -1289,6 +1386,138 @@ class TestExecuteSubprocess:
         assert exc_info.value.stage_name == stage.name
         assert exc_info.value.result.status == StageStatus.FAILED
         assert exc_info.value.result.return_code == 1
+
+    def test_execute_subprocess_with_custom_python_executable(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_subprocess uses the custom python_executable from config
+        instead of sys.executable when specified.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "test_python_version.py"
+        script.write_text("import sys\nprint(sys.executable)")
+
+        stage = Stage(
+            name="subprocess_custom_exec",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        # Set a custom python executable (could be a venv path or alternative interpreter)
+        custom_python = "/custom/path/to/python"
+        execution.config.python_executable = custom_python
+        execution.working_directory = FileSystemSetUp.from_path(tmp_path)
+
+        # Mock subprocess.run to capture the command executed
+        with patch("rap_toolkit.execution.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="custom python output",
+                stderr="",
+            )
+
+            pythonstageexecutor._execute_subprocess(stage, execution)
+
+            # Verify the custom executable was used in the command
+            called_command = mock_run.call_args[0][0]
+            assert called_command[0] == custom_python
+            assert str(script) in called_command[1]
+
+    def test_execute_subprocess_with_sys_executable_fallback(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests that _execute_subprocess uses sys.executable when config.python_executable
+        is None.
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "test_script.py"
+        script.write_text("print('hello')")
+
+        stage = Stage(
+            name="subprocess_default_exec",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        # Ensure config.python_executable is None (default)
+        execution.config.python_executable = None
+        execution.working_directory = FileSystemSetUp.from_path(tmp_path)
+
+        with patch("rap_toolkit.execution.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="output",
+                stderr="",
+            )
+
+            pythonstageexecutor._execute_subprocess(stage, execution)
+
+            # Verify sys.executable was used
+            called_command = mock_run.call_args[0][0]
+            assert called_command[0] == sys.executable
+
+    def test_execute_subprocess_custom_executable_nonexistent(
+        self, pythonstageexecutor, execution, tmp_path
+    ) -> None:
+        """
+        Tests _execute_subprocess behavior when custom python_executable path
+        does not exist (subprocess will fail at runtime).
+
+        Parameters
+        ----------
+        ``pythonstageexecutor`` : PythonStageExecutor
+            A ``PythonStageExecutor`` object for testing.
+        ``execution`` : ExecutionContext
+            An ``ExecutionContext`` object for testing.
+        ``tmp_path`` : Path
+            A temporary path for testing.
+        """
+        script = tmp_path / "test_script.py"
+        script.write_text("print('test')")
+
+        stage = Stage(
+            name="subprocess_bad_exec",
+            source=script,
+            dependencies=[],
+            metadata={},
+        )
+
+        execution.config.python_executable = "/nonexistent/python3.12"
+        execution.working_directory = FileSystemSetUp.from_path(tmp_path)
+
+        # subprocess.run will return non-zero exit code when executable not found
+        with patch("rap_toolkit.execution.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=127,  # Command not found exit code
+                stdout="",
+                stderr="[Errno 2] No such file or directory: '/nonexistent/python3.12'",
+            )
+
+            with pytest.raises(StageExecutionError) as exc_info:
+                pythonstageexecutor._execute_subprocess(stage, execution)
+
+            assert exc_info.value.stage_name == stage.name
+            assert exc_info.value.result.return_code == 127
 
 
 class TestInvokeCallable:
