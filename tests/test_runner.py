@@ -487,26 +487,31 @@ class TestRunnerBuildParser:
         assert namespace.name == "demo pipeline"
         assert isinstance(namespace.name, str)
 
+    def test_build_parser_requires_at_least_one_stage(self) -> None:
+        """
+        Tests that build_parser() enforces the required stages positional argument.
+        """
+        from rap_toolkit.runner import build_parser
+
+        parser = build_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([])
+
 
 class TestRunnerMain:
     def test_main_builds_pipeline_and_runs_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
-        Tests that main() parses arguments, builds a pipeline from the parsed stage list,
-        and runs that pipeline.
+        Tests that main() uses the real parser, builds a pipeline from the parsed stage
+        list, and runs that pipeline.
         """
         import rap_toolkit.runner as runner_module
 
         fake_pipeline = Mock()
         fake_pipeline.run = Mock(return_value=None)
         from_files_mock = Mock(return_value=fake_pipeline)
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("stages", nargs="+")
-        parser.add_argument("--name", default=None)
-
-        monkeypatch.setattr(runner_module, "build_parser", lambda: parser)
         monkeypatch.setattr("rap_toolkit.pipeline.Pipeline.from_files", from_files_mock)
 
         exit_code = runner_module.main(
@@ -530,12 +535,6 @@ class TestRunnerMain:
         fake_pipeline = Mock()
         fake_pipeline.run = Mock(return_value=None)
         from_files_mock = Mock(return_value=fake_pipeline)
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("stages", nargs="+")
-        parser.add_argument("--name", default=None)
-
-        monkeypatch.setattr(runner_module, "build_parser", lambda: parser)
         monkeypatch.setattr("rap_toolkit.pipeline.Pipeline.from_files", from_files_mock)
 
         exit_code = runner_module.main(["stage_a.py"])
@@ -771,5 +770,74 @@ class TestRunnerRun:
             "Executing stage",
             "Pipeline failed",
         ]
+        assert log_config_mock.call_count == 1
+        assert log_attributes_mock.call_count == 1
+
+    def test_run_does_not_double_record_already_recorded_error_result(
+        self, runner_pipeline, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests that when a StageExecutionError is raised and its result has already
+        been recorded in the ExecutionContext, the runner does not duplicate the
+        recording. This tests the conditional branch that checks
+        context.result_for(exc.result.name) is None before re-recording.
+        """
+        from rap_toolkit.runner import PipelineRunner
+
+        runner = PipelineRunner(
+            logger=Logger(
+                log_dir=FileSystemSetUp.from_path(
+                    tmp_path / "runner_logs", path_type="dir"
+                )
+            )
+        )
+        runner.logger.event = Mock()
+
+        runtime_id = _runtime_id()
+        pipeline_manifest = RunManifest(
+            rap_name=runner_pipeline.name, run_id=runtime_id.id
+        )
+        stage_result = StageResult(
+            name="stage_a",
+            status=StageStatus.FAILED,
+            started_at=datetime(2026, 10, 7, 12, 34, 56),
+            finished_at=datetime(2026, 10, 7, 12, 34, 57),
+            outputs={"partial": True},
+            error="boom",
+        )
+        log_config_mock = Mock()
+        log_attributes_mock = Mock()
+        now_values = iter(
+            [
+                datetime(2026, 10, 7, 12, 34, 56),
+                datetime(2026, 10, 7, 12, 34, 58),
+            ]
+        )
+
+        monkeypatch.setattr("rap_toolkit.runner._log_config", log_config_mock)
+        monkeypatch.setattr(
+            "rap_toolkit.runner._log_pipeline_attributes", log_attributes_mock
+        )
+        monkeypatch.setattr("rap_toolkit.runner.now", lambda: next(now_values))
+        runner_pipeline.validate = Mock()
+        runner_pipeline._create_runtime_id = Mock(return_value=runtime_id)
+        runner_pipeline.ordered_stages = Mock(return_value=[runner_pipeline.stages[0]])
+        runner_pipeline._construct_manifest = Mock(return_value=pipeline_manifest)
+
+        def fail_stage_after_recording(context, executor):
+            context.record(stage_result)
+            assert context.result_for(stage_result.name) is stage_result
+            raise StageExecutionError("stage failed", result=stage_result)
+
+        runner_pipeline.stages[0].run = Mock(side_effect=fail_stage_after_recording)
+
+        with pytest.raises(StageExecutionError):
+            runner.run(runner_pipeline)
+
+        assert runner_pipeline.last_run is not None
+        assert runner_pipeline.last_run.stage_results == []
+        assert runner_pipeline.last_run.stage_outputs == {"stage_a": {"partial": True}}
+        assert pipeline_manifest.stages_run == []
+        assert pipeline_manifest.outputs == {}
         assert log_config_mock.call_count == 1
         assert log_attributes_mock.call_count == 1
