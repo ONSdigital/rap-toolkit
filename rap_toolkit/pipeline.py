@@ -95,7 +95,7 @@ class Pipeline:
             normalized_name or self._normalize_name(resolved_config.name) or "pipeline"
         )
         self.backend = backend or resolved_config.backend or "python"
-        if backend == "python" and resolved_config.backend != "python":
+        if backend != resolved_config.backend:
             raise PipelineInitialisationError(
                 f"Pipeline backend {backend} does not align with PipelineConfig backend {resolved_config.backend}."
             )
