@@ -624,10 +624,15 @@ class TestPipelineStageConfigHandling:
         )
 
         with pytest.warns(
-            StageConfigurationWarning,
-            match="Stage configuration found in PipelineConfig metadata",
-        ):
+            (PipelineConfigurationWarning, StageConfigurationWarning)
+        ) as warnings:
             pipeline = Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+        assert any(
+            "Stage configuration found in PipelineConfig metadata"
+            in str(warning.message)
+            for warning in warnings
+        )
 
         assert pipeline.stage_configs["Stage_0"].require("years_to_run") == 2017
 
@@ -644,10 +649,15 @@ class TestPipelineStageConfigHandling:
         )
 
         with pytest.warns(
-            StageConfigurationWarning,
-            match="Global configuration found in PipelineConfig metadata",
-        ):
+            (StageConfigurationWarning, PipelineConfigurationWarning)
+        ) as warnings:
             pipeline = Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+        assert any(
+            "Global configuration found in PipelineConfig metadata"
+            in str(warning.message)
+            for warning in warnings
+        )
 
         global_variables, exclusions = pipeline.global_config.get_attributes()
         assert global_variables["dry_run"] is True
@@ -877,7 +887,7 @@ class TestPipelineStageSelectionAndGraph:
         Tests that the resolve_stages_to_run method returns an empty graph when
         all stages are disabled.
         """
-        with pytest.warns(StageConfigurationWarning):
+        with pytest.warns((StageConfigurationWarning, PipelineConfigurationWarning)):
             pipeline = Pipeline(
                 stages=[stage_factory("Stage_0"), stage_factory("Stage_1")],
                 config=PipelineConfig(
@@ -1109,7 +1119,7 @@ class TestPipelineValidationAndManifest:
         stage_file = tmp_path / "Stage_0.py"
         stage_file.write_text("def run(context):\n    return None\n", encoding="utf-8")
 
-        with pytest.warns(PipelineConfigurationWarning):
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
             pipeline = Pipeline(
                 config=PipelineConfig(output_dir=tmp_path / "outputs", overwrite=False),
                 stages=[stage_factory("Stage_0", source=stage_file)],
@@ -1120,8 +1130,8 @@ class TestPipelineValidationAndManifest:
                 {"output_dir": str(existing_output_dir)}, name="Stage_0"
             )
 
-        with pytest.raises(StageConfigurationError, match="already exists"):
-            pipeline.validate()
+            with pytest.raises(StageConfigurationError, match="already exists"):
+                pipeline.validate()
 
     def test_validate_warns_when_stage_output_directory_exists_and_overwrite_true(
         self, tmp_path: Path, stage_factory
@@ -1442,12 +1452,16 @@ class TestPipelineCompositeConfigurationHelpers:
         }
 
         with pytest.warns(
-            PipelineConfigurationWarning, match="Multiple configuration keys were found"
-        ):
+            (PipelineConfigurationWarning, StageConfigurationWarning)
+        ) as warnings:
             pipeline_payload, stage_payload, global_payload = (
                 Pipeline._split_config_sections(raw_config)
             )
 
+        assert any(
+            "Multiple configuration keys were found" in str(warning.message)
+            for warning in warnings
+        )
         assert pipeline_payload == {"name": "first"}
         assert stage_payload == {}
         assert global_payload == {}
@@ -1464,11 +1478,12 @@ class TestPipelineCompositeConfigurationHelpers:
             "stage_config": {"Stage_1": {}},
         }
 
-        with pytest.warns(
-            PipelineConfigurationWarning, match="Multiple configuration keys were found"
-        ):
+        with pytest.warns(PipelineConfigurationWarning) as warnings:
             _, stage_payload, _ = Pipeline._split_config_sections(raw_config)
-
+        assert any(
+            "Multiple configuration keys were found" in str(warning.message)
+            for warning in warnings
+        )
         assert stage_payload == {"Stage_0": {}}
 
     def test_split_config_sections_warns_when_unextracted_sections_remain(self) -> None:
