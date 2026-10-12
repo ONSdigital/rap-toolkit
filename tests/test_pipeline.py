@@ -1,4 +1,5 @@
 import warnings
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -8,6 +9,7 @@ from rap_toolkit.errors import (
     HistoricalPipelineLoadError,
     PipelineConfigurationError,
     PipelineInitialisationError,
+    StageConfigurationError,
     StageLoadError,
 )
 from rap_toolkit.execution import PythonStageExecutor
@@ -263,6 +265,143 @@ class TestPipelineNamingAndInit:
             ),
         }
 
+    def test_init_rejects_constructor_stages_and_config_defined_stages(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Tests that when a Pipeline is initialised with both stages defined in the
+        constructor and in the configuration, a PipelineInitialisationError is raised.
+        """
+        configured_stage = tmp_path / "configured_stage.py"
+        configured_stage.write_text(
+            "def run(context):\n    return 'ok'\n", encoding="utf-8"
+        )
+
+        config = {
+            "pipeline_variables": {
+                "work_dir": tmp_path,
+                "project_root": tmp_path,
+                "log_dir": tmp_path / "logs",
+                "stages": [
+                    {
+                        "configured_stage": {
+                            "location": str(configured_stage),
+                        }
+                    }
+                ],
+            },
+            "stage_configuration": {},
+        }
+
+        with pytest.raises(PipelineInitialisationError):
+            Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+    def test_init_rejects_backend_mismatch_between_argument_and_config(
+        self,
+    ) -> None:
+        """
+        Tests that when a Pipeline is initialised with a backend argument that
+        mismatches the backend specified in the configuration, a
+        PipelineInitialisationError is raised.
+        """
+        with pytest.raises(PipelineInitialisationError):
+            Pipeline(
+                backend="python",
+                config=PipelineConfig(backend="spark"),
+                stages=[Stage("Stage_0", source=Path("Stage_0.py"), dependencies=())],
+            )
+
+    def test_init_uses_supplied_executor_without_generating_context(
+        self, monkeypatch
+    ) -> None:
+        """
+        Test that checks that an execution context is not generated if one is already
+        supplied to the Pipeline creation.
+        """
+        generate_context = mock.Mock()
+        monkeypatch.setattr(Pipeline, "_generate_context", generate_context)
+        executor = mock.Mock()
+
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(
+                stages=[Stage("Stage_0", source=Path("Stage_0.py"), dependencies=())],
+                executor=executor,
+            )
+
+        assert pipeline.executor is executor
+        generate_context.assert_not_called()
+
+    def test_from_files_rejects_non_path_non_string_entries(self) -> None:
+        """
+        Checks error detection in from_files method to ensure that the files listed
+        are either Path objects or strings.
+        """
+        with pytest.raises(PipelineConfigurationError):
+            Pipeline.from_files([123])
+
+    def test_assign_dependencies_single_stage_tuple_form(self, stage_factory) -> None:
+        """
+        Checks that multiple dependencies can be assigned to a single stage as a tuple.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        stage = pipeline.stages[0]
+        assigned = pipeline._assign_dependencies(("dep_a", "dep_b"), stage)
+
+        assert assigned == {"Stage_0": ("dep_a", "dep_b")}
+        assert stage.dependencies == ("dep_a", "dep_b")
+
+    def test_normalize_dependency_values_deduplicates_and_strips_blanks(self) -> None:
+        """
+        Checks that the pipeline normalization method appropriately handles duplicates,
+        white space, and blanks.
+        """
+        assert Pipeline._normalize_dependency_values(
+            ["dep_a", " ", "dep_a", "dep_b"]
+        ) == (
+            "dep_a",
+            "dep_b",
+        )
+
+    def test_normalize_dependency_values_deduplicates_with_white_space(self) -> None:
+        """
+        Checks that the pipeline normalization method appropriately handles duplicates,
+        even if one contains white space.
+        """
+        assert Pipeline._normalize_dependency_values(["dep_a", "dep_a ", "dep_b"]) == (
+            "dep_a",
+            "dep_b",
+        )
+
+    def test_normalize_dependency_mapping_converts_values_to_tuples(self) -> None:
+        """
+        Checks that dependnecies assigned as lists are appropriately converted to tuples.
+        """
+        normalized = Pipeline._normalize_dependency_mapping(
+            {"Stage_0": ["dep_a", "dep_a"], "Stage_1": "dep_b"}
+        )
+
+        assert normalized == {
+            "Stage_0": ("dep_a",),
+            "Stage_1": ("dep_b",),
+        }
+
+    def test_dependencies_for_stage_matches_callable_name(self) -> None:
+        """
+        Tests that when dependencies for a specific stage are requested, they
+        are returned in an appropriate format.
+        """
+
+        def callable_stage():
+            return None
+
+        result = Pipeline._dependencies_for_stage(
+            "Stage_0", callable_stage, {"callable_stage": ["dep_a"]}
+        )
+
+        assert result == ("dep_a",)
+
 
 class TestPipelineStageConfigHandling:
     def test_add_stage_parses_stage_configs_keyword(self, stage_factory) -> None:
@@ -361,6 +500,158 @@ class TestPipelineStageConfigHandling:
         pipeline.add_stage_config({"years_to_run": 2017}, name="Stage_0")
 
         assert pipeline.stage_configs["Stage_0"].require("years_to_run") == 2017
+
+    def test_create_stage_config_selects_named_stage_from_composite_mapping(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the create_stage_config method correctly selects the named
+        stage from a composite mapping of stage configurations.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(
+                stages=[stage_factory("Stage_0"), stage_factory("Stage_1")]
+            )
+
+        result = pipeline.create_stage_config(
+            {
+                "Stage_0": {"years_to_run": 2017},
+                "Stage_1": {"years_to_run": 2018},
+            },
+            name="Stage_1",
+        )
+
+        assert result.name == "Stage_1"
+        assert result.require("years_to_run") == 2018
+
+    def test_create_stage_config_errors_when_multiple_stage_configs_and_no_name(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the create_stage_config method raises an error when
+        multiple stage configurations are provided and no stage name is specified.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(
+                stages=[stage_factory("Stage_0"), stage_factory("Stage_1")]
+            )
+
+        with pytest.raises(
+            StageConfigurationError, match="multiple stage configurations"
+        ):
+            pipeline.create_stage_config(
+                {
+                    "Stage_0": {"years_to_run": 2017},
+                    "Stage_1": {"years_to_run": 2018},
+                }
+            )
+
+    def test_create_stage_config_errors_when_named_stage_missing_from_composite_mapping(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the create_stage_config method raises an error when
+        the named stage is missing from a composite mapping of stage configurations.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(StageConfigurationError, match="was not found"):
+            pipeline.create_stage_config(
+                {"Stage_1": {"years_to_run": 2017}},
+                name="Stage_0",
+            )
+
+    def test_add_stage_config_rejects_stageconfig_name_mismatch(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the add_stage_config method raises an error when
+        the stage configuration name does not match the specified stage name to prevent
+        stage configurations being added to the incorrect stages.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(StageConfigurationError, match="does not match stage"):
+            pipeline.add_stage_config(
+                StageConfig(name="Stage_1", _variables={"years_to_run": 2017}),
+                name="Stage_0",
+            )
+
+    def test_add_stage_config_accepts_named_mapping_payload_with_scalar_values(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the add_stage_config method accepts a named mapping payload
+        with scalar values.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        pipeline.add_stage_config({"Stage_0": "not-a-mapping"}, name="Stage_0")
+
+        assert pipeline.stage_configs["Stage_0"].to_dict() == {
+            "Stage_0": "not-a-mapping"
+        }
+
+    def test_create_stage_config_rejects_unsupported_payload_type(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the create_stage_config method raises an error when
+        an unsupported payload type is provided such as an integer.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(
+            StageConfigurationError,
+            match="Unsupported stage configuration specification",
+        ):
+            pipeline.create_stage_config(123)
+
+    def test_resolve_config_warns_for_stage_configuration_in_pipelineconfig_metadata(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the resolve_config method warns when a stage configuration
+        is found in the PipelineConfig metadata.
+        """
+        config = PipelineConfig(
+            output_dir=Path("outputs"),
+            metadata={"stage_configuration": {"Stage_0": {"years_to_run": 2017}}},
+        )
+
+        with pytest.warns(
+            StageConfigurationWarning,
+            match="Stage configuration found in PipelineConfig metadata",
+        ):
+            pipeline = Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+        assert pipeline.stage_configs["Stage_0"].require("years_to_run") == 2017
+
+    def test_resolve_config_warns_for_global_configuration_in_pipelineconfig_metadata(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the resolve_config method warns when a global configuration
+        is found in the PipelineConfig metadata.
+        """
+        config = PipelineConfig(
+            output_dir=Path("outputs"),
+            metadata={"global_config": {"dry_run": True}},
+        )
+
+        with pytest.warns(
+            StageConfigurationWarning,
+            match="Global configuration found in PipelineConfig metadata",
+        ):
+            pipeline = Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+        global_variables, exclusions = pipeline.global_config.get_attributes()
+        assert global_variables["dry_run"] is True
+        assert exclusions == {}
 
 
 class TestPipelineStageSelectionAndGraph:
@@ -566,6 +857,122 @@ class TestPipelineStageSelectionAndGraph:
         assert pipeline.config.stages_to_run["Stage_1"] is True
         assert {stage.name for stage in pipeline.graph.stages} == {"Stage_0", "Stage_1"}
 
+    def test_resolve_stages_to_run_rejects_unknown_stage_names(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the resolve_stages_to_run method raises an error when
+        unknown stage names are provided.
+        """
+        with pytest.raises(PipelineInitialisationError, match="unknown stages"):
+            Pipeline(
+                stages=[stage_factory("Stage_0")],
+                config=PipelineConfig(stages_to_run={"Missing": True}),
+            )
+
+    def test_resolve_stages_to_run_returns_empty_graph_when_all_disabled(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the resolve_stages_to_run method returns an empty graph when
+        all stages are disabled.
+        """
+        with pytest.warns(StageConfigurationWarning):
+            pipeline = Pipeline(
+                stages=[stage_factory("Stage_0"), stage_factory("Stage_1")],
+                config=PipelineConfig(
+                    stages_to_run={"Stage_0": False, "Stage_1": False}
+                ),
+            )
+
+        assert pipeline.graph.stages == []
+        assert pipeline.ordered_stages() == []
+
+    def test_enable_stage_raises_for_unknown_stage(self, stage_factory) -> None:
+        """
+        Tests that the enable_stage method raises an error when an unknown stage is specified.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(PipelineInitialisationError, match="does not exist"):
+            pipeline.enable_stage("Missing")
+
+    def test_disable_stage_raises_for_unknown_stage(self, stage_factory) -> None:
+        """
+        Tests that the disable_stage method raises an error when an unknown stage is specified.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(PipelineInitialisationError, match="does not exist"):
+            pipeline.disable_stage("Missing")
+
+    def test_enable_stage_flattens_list_arguments(self, stage_factory) -> None:
+        """
+        Tests that the enable_stage method correctly flattens list arguments.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(
+                stages=[stage_factory("Stage_0"), stage_factory("Stage_1")],
+                config=PipelineConfig(
+                    stages_to_run={"Stage_0": False, "Stage_1": False}
+                ),
+            )
+
+        pipeline.enable_stage(["Stage_0", "Stage_1"])
+
+        assert pipeline.config.stages_to_run == {"Stage_0": True, "Stage_1": True}
+        assert {stage.name for stage in pipeline.graph.stages} == {"Stage_0", "Stage_1"}
+
+    def test_disable_stage_flattens_list_arguments(self, stage_factory) -> None:
+        """
+        Tests that the disable_stage method correctly flattens list arguments.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(
+                stages=[stage_factory("Stage_0"), stage_factory("Stage_1")]
+            )
+
+        pipeline.disable_stage(["Stage_0", "Stage_1"])
+
+        assert pipeline.config.stages_to_run == {"Stage_0": False, "Stage_1": False}
+        assert pipeline.graph.stages == []
+
+    def test_add_stage_rejects_stage_config_for_unknown_stage(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the add_stage method raises an error when a stage config is provided for an unknown stage.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        with pytest.raises(StageConfigurationError, match="was not found"):
+            pipeline.add_stage(
+                stage_factory("Stage_1"),
+                stage_configs=[{"DifferentStage": {"years_to_run": 2017}}],
+            )
+
+    def test_add_stage_with_no_stages_warns_and_changes_nothing(
+        self, stage_factory
+    ) -> None:
+        """
+        Tests that the add_stage method warns and changes nothing when no stages are provided.
+        """
+        with pytest.warns((PipelineConfigurationWarning, StageConfigurationWarning)):
+            pipeline = Pipeline(stages=[stage_factory("Stage_0")])
+
+        original_stages = list(pipeline.stages)
+        original_stage_configs = dict(pipeline.stage_configs)
+
+        with pytest.warns(PipelineConfigurationWarning, match="No stages provided"):
+            pipeline.add_stage()
+
+        assert pipeline.stages == original_stages
+        assert pipeline.stage_configs == original_stage_configs
+        assert [stage.name for stage in pipeline.graph.stages] == ["Stage_0"]
+
 
 class TestPipelineValidationAndManifest:
     def test_validate_skips_source_check_for_disabled_stages(
@@ -690,6 +1097,630 @@ class TestPipelineValidationAndManifest:
                 ],
             )
 
+    def test_validate_raises_when_stage_output_directory_exists_and_overwrite_false(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Test that the validate method raises an error if the stage output directory
+        already exists and the pipeline is configured not to overwrite it.
+        """
+        existing_output_dir = tmp_path / "existing_output"
+        existing_output_dir.mkdir()
+        stage_file = tmp_path / "Stage_0.py"
+        stage_file.write_text("def run(context):\n    return None\n", encoding="utf-8")
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs", overwrite=False),
+                stages=[stage_factory("Stage_0", source=stage_file)],
+            )
+
+        with pytest.warns(StageConfigurationWarning):
+            pipeline.add_stage_config(
+                {"output_dir": str(existing_output_dir)}, name="Stage_0"
+            )
+
+        with pytest.raises(StageConfigurationError, match="already exists"):
+            pipeline.validate()
+
+    def test_validate_warns_when_stage_output_directory_exists_and_overwrite_true(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Test that the validate method warns if the stage output directory
+        already exists and the pipeline is configured to overwrite it.
+        """
+        existing_output_dir = tmp_path / "existing_output"
+        existing_output_dir.mkdir()
+        stage_file = tmp_path / "Stage_0.py"
+        stage_file.write_text("def run(context):\n    return None\n", encoding="utf-8")
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs", overwrite=True),
+                stages=[stage_factory("Stage_0", source=stage_file)],
+            )
+
+        with pytest.warns(StageConfigurationWarning):
+            pipeline.add_stage_config(
+                {"output_dir": str(existing_output_dir)}, name="Stage_0"
+            )
+
+        with pytest.warns(StageConfigurationWarning) as recorded_warnings:
+            pipeline.validate()
+
+        assert any("overwrite" in str(record.message) for record in recorded_warnings)
+
+    def test_add_stage_config_warns_when_output_directory_keys_present(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Test that the add_stage_config method warns when output directory keys are present.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[stage_factory("Stage_0")],
+            )
+
+        with pytest.warns(
+            StageConfigurationWarning, match="contains output directory keys"
+        ):
+            pipeline.add_stage_config({"output_dir": "artifact"}, name="Stage_0")
+
+    def test_manifest_parameters_includes_stage_configuration_when_present(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Test that the manifest parameters include the stage configuration when present.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[stage_factory("Stage_0")],
+            )
+
+        pipeline.add_stage_config({"years_to_run": 2017}, name="Stage_0")
+        parameters = pipeline._manifest_parameters()
+
+        assert parameters["stage_configuration"]["Stage_0"]["years_to_run"] == 2017
+
+    def test_combine_configs_returns_pipeline_stage_and_global_sections(
+        self, tmp_path: Path, stage_factory
+    ) -> None:
+        """
+        Test that the _combine_configs method returns the pipeline, stage, and global sections.
+        """
+        config = {
+            "pipeline_config": {
+                "output_dir": tmp_path / "outputs",
+                "work_dir": tmp_path,
+                "project_root": tmp_path,
+                "log_dir": tmp_path / "logs",
+            },
+            "stage_configuration": {"Stage_0": {"years_to_run": 2017}},
+            "global_config": {"dry_run": True},
+        }
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(config=config, stages=[stage_factory("Stage_0")])
+
+        combined = pipeline._combine_configs()
+
+        assert set(combined) == {"pipeline_config", "stage_configs", "global_config"}
+        assert combined["stage_configs"]["Stage_0"]["years_to_run"] == 2017
+        assert combined["global_config"]["dry_run"] is True
+
+    def test_create_runtime_id_contains_timestamp_hash_and_short_hash_consistently(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _create_runtime_id method generates a runtime ID containing
+        a timestamp, a hash, and a short hash consistently.
+        """
+        fixed_now = datetime(2026, 10, 7, 12, 34, 56)
+        monkeypatch.setattr("rap_toolkit.pipeline.now", lambda: fixed_now)
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        runtime_id = pipeline._create_runtime_id()
+
+        assert runtime_id.timestamp == fixed_now
+        assert runtime_id.short_hash == runtime_id.hash[:8]
+        assert runtime_id.id == f"2026-10-07_123456_{runtime_id.short_hash}"
+
+    def test_discover_git_commit_returns_none_on_oserror(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _discover_git_commit method returns None when an OSError is raised.
+        """
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.subprocess.run", mock.Mock(side_effect=OSError())
+        )
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        assert pipeline._discover_git_commit() is None
+
+    def test_discover_git_commit_returns_none_on_blank_stdout(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _discover_git_commit method returns None when the stdout is blank.
+        """
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.subprocess.run",
+            mock.Mock(return_value=mock.Mock(stdout="   ")),
+        )
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        assert pipeline._discover_git_commit() is None
+
+    def test_package_versions_includes_python_when_pyyaml_missing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _package_versions method includes Python when PyYAML is missing.
+        """
+        package_not_found = type("PackageNotFoundError", (Exception,), {})
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.importlib_metadata.PackageNotFoundError",
+            package_not_found,
+        )
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.importlib_metadata.version",
+            mock.Mock(side_effect=package_not_found()),
+        )
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        versions = pipeline._package_versions()
+
+        assert any(version.startswith("python=") for version in versions)
+        assert not any(version.startswith("pyyaml=") for version in versions)
+
+    def test_current_user_returns_none_when_getuser_raises(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _current_user method returns None when getuser raises a RuntimeError.
+        """
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.getpass.getuser",
+            mock.Mock(side_effect=RuntimeError()),
+        )
+
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        assert pipeline._current_user() is None
+
+    def test_pipeline_str_includes_core_attributes(self, tmp_path: Path) -> None:
+        """
+        Checks that correct attributes are included in the string representation of the Pipeline instance.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                name="example_pipeline",
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        text = str(pipeline)
+
+        assert "Pipeline Instance Attributes" in text
+        assert "example_pipeline" in text
+        assert "Backend:" in text
+        assert "Executor:" in text
+
+    def test_pipeline_repr_includes_core_attributes(self, tmp_path: Path) -> None:
+        """
+        Test that the repr of the Pipeline instance includes core attributes.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                name="example_pipeline",
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        text = repr(pipeline)
+
+        assert "Pipeline(name=example_pipeline" in text
+        assert "backend=python" in text
+        assert "stages=" in text
+
+
+class TestPipelineCompositeConfigurationHelpers:
+    def test_load_config_mapping_rejects_unsupported_suffix(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _load_config_mapping method rejects unsupported file suffixes.
+        """
+        config_file = tmp_path / "conf.txt"
+        config_file.write_text("pipeline_config: {}\n", encoding="utf-8")
+
+        with pytest.raises(
+            StageConfigurationError, match="Unsupported config file format"
+        ):
+            Pipeline._load_config_mapping(config_file)
+
+    def test_load_config_mapping_raises_for_missing_file(self, tmp_path: Path) -> None:
+        """
+        Test that the _load_config_mapping method raises a FileNotFoundError for a missing file.
+        """
+        with pytest.raises(FileNotFoundError, match="Config file does not exist"):
+            Pipeline._load_config_mapping(tmp_path / "missing.yaml")
+
+    def test_load_config_mapping_returns_empty_dict_for_blank_yaml(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Tests that a warning is raised and a blank configuration is received
+        when the configuration file is empty.
+        """
+        config_file = tmp_path / "blank.yaml"
+        config_file.write_text("", encoding="utf-8")
+
+        with pytest.warns(UserWarning, match="No configuration has loaded"):
+            result = Pipeline._load_config_mapping(config_file)
+
+        assert result == {}
+
+    def test_load_config_mapping_rejects_non_mapping_top_level_yaml(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _load_config_mapping method rejects non-mapping top-level YAML content.
+        """
+        config_file = tmp_path / "list.yaml"
+        config_file.write_text("- a\n- b\n", encoding="utf-8")
+
+        with pytest.raises(
+            TypeError, match="Configuration file must contain a mapping"
+        ):
+            Pipeline._load_config_mapping(config_file)
+
+    def test_split_config_sections_raises_when_required_pipeline_key_missing(
+        self,
+    ) -> None:
+        """
+        Test that the _split_config_sections method raises a PipelineConfigurationError
+        when the required pipeline key is missing.
+        """
+        with pytest.raises(
+            PipelineConfigurationError, match="No valid keys were found"
+        ):
+            Pipeline._split_config_sections({"stage_configuration": {}})
+
+    def test_split_config_sections_warns_when_multiple_pipeline_aliases_present(
+        self,
+    ) -> None:
+        """
+        Test that the _split_config_sections method warns when multiple pipeline aliases are present.
+        """
+        raw_config = {
+            "pipeline_variables": {"name": "first"},
+            "pipeline_config": {"name": "second"},
+            "stage_configuration": {},
+        }
+
+        with pytest.warns(
+            PipelineConfigurationWarning, match="Multiple configuration keys were found"
+        ):
+            pipeline_payload, stage_payload, global_payload = (
+                Pipeline._split_config_sections(raw_config)
+            )
+
+        assert pipeline_payload == {"name": "first"}
+        assert stage_payload == {}
+        assert global_payload == {}
+
+    def test_split_config_sections_warns_when_multiple_optional_alias_keys_present(
+        self,
+    ) -> None:
+        """
+        Test that the _split_config_sections method warns when multiple optional alias keys are present.
+        """
+        raw_config = {
+            "pipeline_config": {"name": "pipeline"},
+            "stage_configuration": {"Stage_0": {}},
+            "stage_config": {"Stage_1": {}},
+        }
+
+        with pytest.warns(
+            PipelineConfigurationWarning, match="Multiple configuration keys were found"
+        ):
+            _, stage_payload, _ = Pipeline._split_config_sections(raw_config)
+
+        assert stage_payload == {"Stage_0": {}}
+
+    def test_split_config_sections_warns_when_unextracted_sections_remain(self) -> None:
+        """
+        Test that the _split_config_sections method warns when unextracted sections remain.
+        """
+        raw_config = {
+            "pipeline_config": {"name": "pipeline"},
+            "stage_configuration": {},
+            "unexpected": {"value": 1},
+        }
+
+        with pytest.warns(PipelineConfigurationWarning, match="remaining sections"):
+            pipeline_payload, stage_payload, global_payload = (
+                Pipeline._split_config_sections(raw_config)
+            )
+
+        assert pipeline_payload == {"name": "pipeline"}
+        assert stage_payload == {}
+        assert global_payload == {}
+
+    def test_split_config_sections_rejects_non_mapping_pipeline_section(self) -> None:
+        """
+        Test that the _split_config_sections method rejects non-mapping pipeline section.
+        """
+        with pytest.raises(
+            PipelineConfigurationError,
+            match="pipeline_config section must be a mapping",
+        ):
+            Pipeline._split_config_sections(
+                {"pipeline_config": ["bad"], "stage_configuration": {}}
+            )
+
+    def test_split_config_sections_rejects_non_mapping_stage_section(self) -> None:
+        """
+        Test that the _split_config_sections method rejects non-mapping stage section.
+        """
+        with pytest.raises(
+            PipelineConfigurationError,
+            match="stage_configuration section must be a mapping",
+        ):
+            Pipeline._split_config_sections(
+                {"pipeline_config": {}, "stage_configuration": ["bad"]}
+            )
+
+    def test_split_config_sections_rejects_non_mapping_global_section(self) -> None:
+        """
+        Test that _split_config_sections reject non-mapping global section.
+        """
+        with pytest.raises(
+            PipelineConfigurationError, match="global_config section must be a mapping"
+        ):
+            Pipeline._split_config_sections(
+                {"pipeline_config": {}, "global_config": ["bad"]}
+            )
+
+    def test_normalize_pipeline_payload_maps_working_dir_alias(self) -> None:
+        """
+        Test that the _normalize_pipeline_payload method maps the working_dir alias to work_dir.
+        """
+        normalized = Pipeline._normalize_pipeline_payload({"working_dir": "tmp/work"})
+
+        assert normalized == {"work_dir": "tmp/work"}
+
+    def test_normalize_pipeline_payload_maps_stage_to_run_alias(self) -> None:
+        """
+        Test that the _normalize_pipeline_payload method maps the stage_to_run alias to stages_to_run.
+        """
+        normalized = Pipeline._normalize_pipeline_payload(
+            {"stage_to_run": {"Stage_0": True}}
+        )
+
+        assert normalized == {"stages_to_run": {"Stage_0": True}}
+
+    def test_normalize_pipeline_payload_warns_when_alias_and_canonical_keys_both_present(
+        self,
+    ) -> None:
+        """
+        Test that the _normalize_pipeline_payload method warns when both alias and canonical keys are present.
+        """
+        with pytest.warns(UserWarning) as recorded_warnings:
+            normalized = Pipeline._normalize_pipeline_payload(
+                {
+                    "working_dir": "ignored",
+                    "work_dir": "kept",
+                    "stage_to_run": {"Stage_0": False},
+                    "stages_to_run": {"Stage_0": True},
+                }
+            )
+
+        assert len(recorded_warnings) == 2
+        assert normalized["work_dir"] == "kept"
+        assert normalized["stages_to_run"] == {"Stage_0": True}
+
+    def test_stage_from_config_definition_rejects_invalid_non_mapping_entry(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _stage_from_config_definition method rejects invalid non-mapping entries.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        with pytest.raises(
+            StageConfigurationError, match="Configured stage entries must be mappings"
+        ):
+            pipeline._stage_from_config_definition(
+                123, backend="python", work_dir=work_dir
+            )
+
+    def test_stage_from_config_definition_rejects_multi_stage_compact_mapping(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _stage_from_config_definition method rejects multi-stage compact mappings.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        with pytest.raises(StageConfigurationError, match="exactly one stage name"):
+            pipeline._stage_from_config_definition(
+                {"Stage_0": {}, "Stage_1": {}}, backend="python", work_dir=work_dir
+            )
+
+    def test_stage_from_config_definition_rejects_non_mapping_stage_details(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _stage_from_config_definition method rejects non-mapping stage details.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        with pytest.raises(
+            StageConfigurationError, match="must be provided as a mapping"
+        ):
+            pipeline._stage_from_config_definition(
+                {"Stage_0": "bad"}, backend="python", work_dir=work_dir
+            )
+
+    def test_stage_from_config_definition_skips_stage_when_run_is_false(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _stage_from_config_definition method skips the stage when "run" is False.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        assert (
+            pipeline._stage_from_config_definition(
+                {"Stage_1": {"run": False, "location": "ignored.py"}},
+                backend="python",
+                work_dir=work_dir,
+            )
+            is None
+        )
+
+    def test_stage_from_config_definition_raises_when_source_location_missing(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """
+        Test that the _stage_from_config_definition method raises an error when the source location is missing.
+        """
+        with pytest.warns(PipelineConfigurationWarning):
+            pipeline = Pipeline(
+                config=PipelineConfig(output_dir=tmp_path / "outputs"),
+                stages=[
+                    Stage("Stage_0", source=tmp_path / "Stage_0.py", dependencies=())
+                ],
+            )
+
+        monkeypatch.setattr(
+            pipeline, "_resolve_stage_source", mock.Mock(return_value=None)
+        )
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+        with pytest.raises(
+            StageConfigurationError, match="has no source location defined"
+        ):
+            pipeline._stage_from_config_definition(
+                {"Stage_1": {}}, backend="python", work_dir=work_dir
+            )
+
+    def test_resolve_stage_source_defaults_to_scripts_directory_when_location_blank(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _resolve_stage_source method defaults to the scripts directory when the location is blank.
+        """
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+
+        result = Pipeline._resolve_stage_source("Stage_0", "", work_dir)
+
+        assert str(result).endswith("/scripts/Stage_0.py")
+
+    def test_resolve_stage_source_prefers_existing_explicit_candidate(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Test that the _resolve_stage_source method returns the appropriate location based on explicit
+        parameters.
+        """
+        stage_file = tmp_path / "Stage_0.py"
+        stage_file.write_text("def run(context):\n    return None\n", encoding="utf-8")
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+
+        result = Pipeline._resolve_stage_source("Stage_0", stage_file, work_dir)
+
+        assert Path(result) == stage_file
+
+    def test_resolve_stage_source_preserves_relative_suffix_for_candidate_paths(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Tests that _resolve_stage_source keeps prefix for the scripts.
+        """
+        scripts_dir = tmp_path / "custom_scripts"
+        scripts_dir.mkdir()
+        stage_file = scripts_dir / "special_stage.py"
+        stage_file.write_text("def run(context):\n    return None\n", encoding="utf-8")
+        work_dir = FileSystemSetUp.file_system_setup_factory(tmp_path, path_type="dir")
+
+        result = Pipeline._resolve_stage_source(
+            "special_stage", "custom_scripts/special_stage.py", work_dir
+        )
+
+        assert Path(result).parts[-2:] == ("custom_scripts", "special_stage.py")
+
 
 class TestLoadLatestRunIntegration:
     @pytest.fixture
@@ -762,6 +1793,52 @@ class TestLoadLatestRunIntegration:
 
 
 class TestLoadLatestRun(TestLoadLatestRunIntegration):
+    def test_returns_none_when_extract_historical_run_ids_raises(
+        self, pipeline_no_history: Pipeline, monkeypatch
+    ) -> None:
+        """
+        Tests that _load_latest_run returns None and raises a warning when extract_historical_run_ids raises HistoricalPipelineLoadError.
+        """
+        monkeypatch.setattr(
+            pipeline_no_history.logger,
+            "extract_historical_run_ids",
+            mock.Mock(side_effect=HistoricalPipelineLoadError("test")),
+        )
+
+        with pytest.warns(
+            PipelineConfigurationWarning,
+            match="Unable to load previous runs for this Pipeline",
+        ):
+            assert pipeline_no_history._load_latest_run() is None
+
+    def test_returns_none_when_latest_run_file_cannot_be_loaded(
+        self, pipeline_no_history: Pipeline, monkeypatch
+    ) -> None:
+        """
+        Tests that _load_latest_run returns None and raises a warning when the latest run file cannot be loaded.
+        """
+        monkeypatch.setattr(
+            pipeline_no_history.logger,
+            "extract_historical_run_ids",
+            lambda x, y: [
+                {
+                    "run_id": "bad_run",
+                    "timestamp": "2026-08-10 10:00:00,000",
+                    "run_dir": Path("/path/to/run"),
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            "rap_toolkit.pipeline.load_historical_run",
+            mock.Mock(side_effect=StageLoadError("test")),
+        )
+
+        with pytest.warns(
+            PipelineConfigurationWarning,
+            match="Historical run file does not exist",
+        ):
+            assert pipeline_no_history._load_latest_run() is None
+
     def test_blank_historical_run_ids(
         self, pipeline_no_history: Pipeline, monkeypatch
     ) -> None:
