@@ -4,6 +4,7 @@ from textwrap import dedent
 
 import pytest
 
+from rap_toolkit.errors import StageConfigurationError
 from rap_toolkit.file_system_setup import FileSystemSetUp
 from rap_toolkit.models import (
     PipelineConfig,
@@ -11,6 +12,7 @@ from rap_toolkit.models import (
     PipelineStatus,
     RunManifest,
     RuntimeID,
+    StageConfig,
     StageResult,
     StageStatus,
 )
@@ -289,6 +291,95 @@ class TestPipelineConfig:
             "ssl_file": None,
         }
 
+    def test_pipeline_config_from_mapping_coerces_stage_to_run(
+        self, pipelineconfig
+    ) -> None:
+        """
+        Checks that stages_to_run appropriately converts values to boolean
+        and this is stored in PipelineConfig.
+        """
+        pipelineconfigdict = pipelineconfig.to_dict()
+        pipelineconfigdict["stages_to_run"] = {
+            "stage1": "true",
+            "stage2": "0",
+            "stage3": "Yes",
+            "stage4": "No",
+        }
+
+        new_pipelineconfig = PipelineConfig.from_mapping(pipelineconfigdict)
+        assert new_pipelineconfig.stages_to_run == {
+            "stage1": True,
+            "stage2": False,
+            "stage3": True,
+            "stage4": False,
+        }
+
+    def test_pipelineconfig_from_mapping_converts_bools(self, pipelineconfig) -> None:
+        """
+        Checks that stages_to_run appropriately converts values to boolean
+        and this is stored in PipelineConfig.
+        """
+
+        pipelineconfigdict = pipelineconfig.to_dict()
+        pipelineconfigdict["overwrite"] = "yes"
+
+        new_pipelineconfig = PipelineConfig.from_mapping(pipelineconfigdict)
+        assert new_pipelineconfig.overwrite is True
+
+    def test_pipelineconfig_from_mapping_subprocess_validation(
+        self, pipelineconfig
+    ) -> None:
+        """
+        Checks that stages_to_run appropriately converts values to boolean
+        and this is stored in PipelineConfig.
+        """
+
+        pipelineconfigdict = pipelineconfig.to_dict()
+        options = ["no", "false", "0"]
+        for i in options:
+            pipelineconfigdict["allow_subprocess_fallback"] = i
+            with pytest.warns(UserWarning):
+                new_pipelineconfig = PipelineConfig.from_mapping(pipelineconfigdict)
+            assert new_pipelineconfig.allow_subprocess_fallback is False
+
+    def test_pipeline_config_from_mapping_metadata_wrap(self, pipelineconfig) -> None:
+        """
+        Checks that metadata is wrapped in a dictionary if not already a dictionary.
+        """
+
+        pipelineconfigdict = pipelineconfig.to_dict()
+        pipelineconfigdict["metadata"] = "test metadata"
+        pipelineconfigdict["extra_info"] = "secondary metadata"
+
+        new_pipelineconfig = PipelineConfig.from_mapping(pipelineconfigdict)
+        assert new_pipelineconfig.metadata == {
+            "metadata": "test metadata",
+            "extra_info": "secondary metadata",
+            "variables": ["name", "age"],
+            "num_stages": 6,
+        }
+
+    def test_pipelineconfig_post_init_fssetup(self) -> None:
+        """
+        Checks that the post_init method of PipelineConfig correctly converts
+        FileSystemSetUp instances to their URI representations.
+        """
+        pipelineconfig = PipelineConfig(
+            name="test_rap",
+            backend="python",
+            work_dir=Path("tmp/work"),
+            project_root=Path("project"),
+            log_dir=Path("tmp/logs"),
+            data_dir=Path("tmp/data"),
+            allow_subprocess_fallback=True,
+            python_executable=None,
+            metadata={"variables": ["name", "age"], "num_stages": 6},
+        )
+        assert isinstance(pipelineconfig.work_dir, FileSystemSetUp)
+        assert isinstance(pipelineconfig.project_root, FileSystemSetUp)
+        assert isinstance(pipelineconfig.log_dir, FileSystemSetUp)
+        assert isinstance(pipelineconfig.data_dir, FileSystemSetUp)
+
 
 @pytest.fixture
 def runmanifest() -> RunManifest:
@@ -477,7 +568,171 @@ class TestPipelineRun:
         assert pipelinerun.succeeded == expected
 
 
-# TODO: Test _extract_stages_run and all methods in StageConfig class
+class TestStageConfig:
+    def test_stageconfig_from_mapping_strips_name_and_separates_metadata(self) -> None:
+        """
+        Test that the from_mapping method of StageConfig correctly strips the 'name'
+        key and separates the remaining keys into a metadata dictionary.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="  stage1  ", data=mapping)
+        assert stage_config.name == "stage1"
+        assert stage_config._variables == {"param1": "value1", "param2": "value2"}
+        assert stage_config.metadata == {"info": "test metadata"}
+
+    def test_stageconfig_from_mapping_wraps_non_mapping_metadata(self) -> None:
+        """
+        Test that the from_mapping method of StageConfig wraps non-mapping metadata
+        into a dictionary.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": "test metadata",
+        }
+        stage_config = StageConfig.from_mapping(name="stage2", data=mapping)
+        assert stage_config.name == "stage2"
+        assert stage_config._variables == {"param1": "value1", "param2": "value2"}
+        assert stage_config.metadata == {"metadata": "test metadata"}
+
+    def test_stageconfig_get_returns_default_for_missing_key(self) -> None:
+        """
+        Test that the get method of StageConfig returns the default value for a
+        missing key.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage3", data=mapping)
+        assert stage_config.get("param3", default="default_value") == "default_value"
+        assert stage_config.get("param1", default="default_value") == "value1"
+
+    def test_stage_config_require_raises_missing_key(self) -> None:
+        """
+        Test that the require method of StageConfig raises a KeyError for a missing key.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage4", data=mapping)
+        with pytest.raises(StageConfigurationError):
+            stage_config.require("param3")
+
+    def test_stage_config_get_variables_returns_all_when_variable_is_none(self) -> None:
+        """
+        Test that the get_variables method of StageConfig returns all variables when
+        the variable parameter is None.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage5", data=mapping)
+        assert stage_config.get_variables() == {"param1": "value1", "param2": "value2"}
+
+    def test_stageconfig_get_variables_returns_specific_variable(self) -> None:
+        """
+        Test that the get_variables method of StageConfig returns the specific variable
+        when provided.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage6", data=mapping)
+        assert stage_config.get_variables("param1") == "value1"
+        assert stage_config.get_variables("param2") == "value2"
+
+    def test_stageconfig_get_variables_multiple(self) -> None:
+        """
+        Test that the get_variables method of StageConfig returns the specific variables
+        when provided as a list.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "param3": "value3",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage7", data=mapping)
+        assert stage_config.get_variables(["param1", "param3"]) == {
+            "param1": "value1",
+            "param3": "value3",
+        }
+
+    def test_stage_config_get_variables_missing_key(self) -> None:
+        """
+        Test that the get_variables method of StageConfig raises a KeyError for a
+        missing key.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage8", data=mapping)
+        with pytest.raises(StageConfigurationError):
+            stage_config.get_variables(["param3", "param4"])
+
+    def test_stageconfig_variables_returns_copy(self) -> None:
+        """
+        Test that the variables property of StageConfig returns a copy of the
+        _variables dictionary, ensuring that modifications to the returned dictionary
+        do not affect the original _variables.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage9", data=mapping)
+        variables_copy = stage_config.variables
+        variables_copy["param1"] = "modified_value"
+        assert stage_config._variables["param1"] == "value1"
+
+    def test_stageconfig_to_dict_includes_metadata(self) -> None:
+        """
+        Test that the to_dict method of StageConfig includes the metadata in the
+        returned dictionary representation.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        stage_config = StageConfig.from_mapping(name="stage10", data=mapping)
+        expected_dict = {
+            "param1": "value1",
+            "param2": "value2",
+            "metadata": {"info": "test metadata"},
+        }
+        assert stage_config.to_dict() == expected_dict
+
+    def test_stageconfig_to_dict_without_metadata(self) -> None:
+        """
+        Test that the to_dict method of StageConfig returns a dictionary representation
+        without metadata when no metadata is present.
+        """
+        mapping = {
+            "param1": "value1",
+            "param2": "value2",
+        }
+        stage_config = StageConfig.from_mapping(name="stage11", data=mapping)
+        expected_dict = {
+            "param1": "value1",
+            "param2": "value2",
+        }
+        assert stage_config.to_dict() == expected_dict
 
 
 class TestToFromDictMethods:
